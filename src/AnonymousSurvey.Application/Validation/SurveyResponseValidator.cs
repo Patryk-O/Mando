@@ -7,7 +7,7 @@ namespace AnonymousSurvey.Application.Validation;
 
 public sealed class SurveyResponseValidator : ISurveyResponseValidator
 {
-    public const int MaxTextLength = 2000;
+    public const int MaxTextLength = SurveyLimits.MaxOpenAnswerLength;
 
     public ValidationResult Validate(AnswerInputDto answer, SurveyQuestionDto question)
     {
@@ -15,6 +15,11 @@ public sealed class SurveyResponseValidator : ISurveyResponseValidator
         {
             return ValidationResult.Failure(
                 $"Odpowiedź nie pasuje do pytania (oczekiwane Id {question.QuestionId}, otrzymane {answer.QuestionId}).");
+        }
+
+        if (answer.IsEmpty && !question.IsRequired)
+        {
+            return ValidationResult.Success();
         }
 
         return question.Type switch
@@ -44,7 +49,11 @@ public sealed class SurveyResponseValidator : ISurveyResponseValidator
         {
             if (!answersByQuestion.TryGetValue(question.QuestionId, out var questionAnswers))
             {
-                errors.Add($"Brak odpowiedzi na pytanie: „{question.Text}”.");
+                if (question.IsRequired)
+                {
+                    errors.Add($"Brak odpowiedzi na pytanie: „{question.Text}”.");
+                }
+
                 continue;
             }
 
@@ -62,6 +71,12 @@ public sealed class SurveyResponseValidator : ISurveyResponseValidator
         foreach (var extraId in answersByQuestion.Keys.Where(id => !expectedIds.Contains(id)))
         {
             errors.Add($"Odpowiedź na nieznane pytanie (Id {extraId}).");
+        }
+
+        var hasAnyAnswer = answers.Any(a => expectedIds.Contains(a.QuestionId) && !a.IsEmpty);
+        if (!hasAnyAnswer)
+        {
+            errors.Add("Odpowiedz na co najmniej jedno pytanie.");
         }
 
         return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Failure(errors.ToArray());

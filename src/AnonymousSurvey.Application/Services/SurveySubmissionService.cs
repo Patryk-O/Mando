@@ -9,6 +9,9 @@ public sealed class SurveySubmissionService(
     ISurveyResponseValidator validator,
     ISurveyResponseSaver saver) : ISurveySubmissionService
 {
+    public const string SurveyClosedMessage = "Ta ankieta została zamknięta i nie przyjmuje już odpowiedzi.";
+    public const string FormChangedMessage = "Ankieta została zmieniona w trakcie wypełniania. Sprawdź formularz i wyślij ponownie.";
+
     public async Task<SubmissionResult> SubmitAsync(
         SubmitSurveyResponseDto submission,
         CancellationToken cancellationToken = default)
@@ -21,7 +24,22 @@ public sealed class SurveySubmissionService(
             return new SubmissionResult(validation, null);
         }
 
-        var saved = await saver.SaveAsync(submission, cancellationToken);
-        return new SubmissionResult(ValidationResult.Success(), saved.SessionId);
+        var answersToSave = submission.Answers.Where(a => !a.IsEmpty).ToList();
+
+        try
+        {
+            var saved = await saver.SaveAsync(submission with { Answers = answersToSave }, cancellationToken);
+            return new SubmissionResult(ValidationResult.Success(), saved.SessionId);
+        }
+        catch (SurveyChangedException ex)
+        {
+            return new SubmissionResult(ValidationResult.Failure(MessageFor(ex.Conflict)), null, ex.Conflict);
+        }
     }
+
+    private static string MessageFor(SubmissionConflict conflict) => conflict switch
+    {
+        SubmissionConflict.SurveyClosed => SurveyClosedMessage,
+        _ => FormChangedMessage
+    };
 }
