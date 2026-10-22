@@ -1,0 +1,25 @@
+@inherits QuestionInputBase
+
+<QuestionCard Number="Number" Text="@Question.Text" Error="@Error">
+    <DxRadioGroup Items="Choices"
+                  TextFieldName="@nameof(ScaleChoice.Label)"
+                  ValueFieldName="@nameof(ScaleChoice.Value)"
+                  Layout="RadioGroupLayout.Horizontal"
+                  Value="Model.ScaleValue"
+                  ValueChanged="@((int? value) => OnValueChanged(value))" />
+    <div class="scale-hints">
+        <span>1 — zdecydowanie źle</span>
+        <span>5 — zdecydowanie dobrze</span>
+    </div>
+</QuestionCard>
+
+@code {
+    private static readonly IReadOnlyList<ScaleChoice> Choices =
+        Enumerable.Range(1, 5).Select(i => new ScaleChoice(i, i.ToString())).ToList();
+
+    private async Task OnValueChanged(int? value)
+    {
+        Model.ScaleValue = value;
+        await NotifyChangedAsync();
+    }
+}

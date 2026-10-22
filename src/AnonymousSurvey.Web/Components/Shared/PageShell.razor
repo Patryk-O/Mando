@@ -1,0 +1,47 @@
+<PageTitle>@Title — Ankieta anonimowa</PageTitle>
+
+<section class="page-shell">
+    <h1 class="page-shell__title" tabindex="-1">@Title</h1>
+
+    @if (IsLoading)
+    {
+        <div class="state-box state-box--loading" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Ładowanie…</span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(Error))
+    {
+        <div class="state-box state-box--error" role="alert">
+            <p>@Error</p>
+            @if (OnRetry.HasDelegate)
+            {
+                <DxButton Text="Spróbuj ponownie" RenderStyle="ButtonRenderStyle.Secondary" Click="OnRetry" />
+            }
+        </div>
+    }
+    else if (IsNotFound)
+    {
+        <div class="state-box">
+            <p>Nie znaleziono strony lub adres jest nieprawidłowy.</p>
+        </div>
+    }
+    else
+    {
+        @ChildContent
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public bool IsLoading { get; set; }
+
+    [Parameter] public bool IsNotFound { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

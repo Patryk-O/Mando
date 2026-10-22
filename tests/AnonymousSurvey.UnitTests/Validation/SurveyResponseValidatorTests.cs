@@ -44,6 +44,18 @@ public class SurveyResponseValidatorTests
     }
 
     [Fact]
+    public void Validate_open_answer_rejects_text_longer_than_limit()
+    {
+        var question = new SurveyQuestionDto(2, "Komentarz", QuestionType.Open, 2);
+        var answer = new AnswerInputDto(2, null, null, new string('a', SurveyResponseValidator.MaxTextLength + 1));
+
+        var result = _validator.Validate(answer, question);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("2000", result.Errors[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_yes_no_requires_choice()
     {
         var question = new SurveyQuestionDto(3, "Zgoda", QuestionType.YesNo, 3);

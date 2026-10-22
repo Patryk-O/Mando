@@ -1,12 +1,22 @@
 using AnonymousSurvey.Application;
+using DevExpress.Blazor;
 using AnonymousSurvey.Infrastructure;
 using AnonymousSurvey.Infrastructure.Persistence;
 using AnonymousSurvey.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var devExpressLicense = builder.Configuration["DevExpress:LicenseKey"];
+if (!string.IsNullOrWhiteSpace(devExpressLicense)
+    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DevExpress_License")))
+{
+    Environment.SetEnvironmentVariable("DevExpress_License", devExpressLicense);
+}
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddDevExpressBlazor(options => options.SizeMode = SizeMode.Medium);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

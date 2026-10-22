@@ -1,0 +1,20 @@
+@inherits QuestionInputBase
+
+<QuestionCard Number="Number" Text="@Question.Text" Error="@Error">
+    <DxMemo Text="@Model.TextValue"
+            TextChanged="@((string? text) => OnTextChanged(text))"
+            BindValueMode="BindValueMode.OnInput"
+            Rows="4"
+            NullText="Wpisz odpowiedź…" />
+    <div class="char-counter">@(Model.TextValue?.Length ?? 0) / @MaxLength</div>
+</QuestionCard>
+
+@code {
+    public const int MaxLength = 2000;
+
+    private async Task OnTextChanged(string? text)
+    {
+        Model.TextValue = text;
+        await NotifyChangedAsync();
+    }
+}

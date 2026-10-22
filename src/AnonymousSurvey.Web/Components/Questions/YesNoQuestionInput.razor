@@ -1,0 +1,24 @@
+@inherits QuestionInputBase
+
+<QuestionCard Number="Number" Text="@Question.Text" Error="@Error">
+    <DxRadioGroup Items="Choices"
+                  TextFieldName="@nameof(YesNoChoice.Label)"
+                  ValueFieldName="@nameof(YesNoChoice.Value)"
+                  Layout="RadioGroupLayout.Horizontal"
+                  Value="Model.BoolValue"
+                  ValueChanged="@((bool? value) => OnValueChanged(value))" />
+</QuestionCard>
+
+@code {
+    private static readonly IReadOnlyList<YesNoChoice> Choices =
+    [
+        new YesNoChoice(true, "Tak"),
+        new YesNoChoice(false, "Nie")
+    ];
+
+    private async Task OnValueChanged(bool? value)
+    {
+        Model.BoolValue = value;
+        await NotifyChangedAsync();
+    }
+}

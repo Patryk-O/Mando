@@ -1,0 +1,30 @@
+<DynamicComponent Type="ResolveComponentType()" Parameters="BuildParameters()" />
+
+@code {
+    [Parameter, EditorRequired] public SurveyQuestionDto Question { get; set; } = null!;
+
+    [Parameter, EditorRequired] public AnswerFormModel Model { get; set; } = null!;
+
+    [Parameter] public int Number { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback OnAnswerChanged { get; set; }
+
+    private Type ResolveComponentType() => Question.Type switch
+    {
+        QuestionType.Scale => typeof(ScaleQuestionInput),
+        QuestionType.YesNo => typeof(YesNoQuestionInput),
+        QuestionType.Open => typeof(OpenQuestionInput),
+        _ => throw new NotSupportedException($"Nieobsługiwany typ pytania: {Question.Type}.")
+    };
+
+    private IDictionary<string, object?> BuildParameters() => new Dictionary<string, object?>
+    {
+        [nameof(QuestionInputBase.Question)] = Question,
+        [nameof(QuestionInputBase.Model)] = Model,
+        [nameof(QuestionInputBase.Number)] = Number,
+        [nameof(QuestionInputBase.Error)] = Error,
+        [nameof(QuestionInputBase.OnAnswerChanged)] = OnAnswerChanged
+    };
+}

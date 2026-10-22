@@ -1,0 +1,160 @@
+@page "/"
+@inherits BasePage
+@inject IActiveSurveyQuery ActiveSurveyQuery
+@inject ISurveyQuestionQuery QuestionQuery
+@inject ISurveyResponseValidator Validator
+@inject ISurveySubmissionService SubmissionService
+
+<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
+    @if (_survey is null)
+    {
+        <div class="state-box">
+            <p>Brak aktywnej ankiety. Zajrzyj tu ponownie później.</p>
+        </div>
+    }
+    else if (_questions.Count == 0)
+    {
+        <div class="state-box">
+            <p>Ankieta nie zawiera jeszcze pytań.</p>
+        </div>
+    }
+    else
+    {
+        <p class="lead">Wypełnienie zajmie około minuty. Wszystkie pytania są wymagane.</p>
+
+        @if (_summaryErrors.Count > 0)
+        {
+            <div class="state-box state-box--error" role="alert">
+                <ul>
+                    @foreach (var message in _summaryErrors)
+                    {
+                        <li>@message</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="question-list">
+            @for (var i = 0; i < _questions.Count; i++)
+            {
+                var question = _questions[i];
+                <QuestionInput @key="question.QuestionId"
+                               Question="question"
+                               Model="_models[question.QuestionId]"
+                               Number="i + 1"
+                               Error="@GetError(question.QuestionId)"
+                               OnAnswerChanged="() => OnAnswerChanged(question)" />
+            }
+        </div>
+
+        <div class="form-actions">
+            <DxButton Text="@(_submitting ? "Wysyłanie…" : "Wyślij odpowiedzi")"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="!_submitting"
+                      Click="SubmitAsync" />
+        </div>
+    }
+</PageShell>
+
+@code {
+    private ActiveSurveyDto? _survey;
+    private IReadOnlyList<SurveyQuestionDto> _questions = [];
+    private readonly Dictionary<int, AnswerFormModel> _models = [];
+    private readonly Dictionary<int, string> _errors = [];
+    private readonly List<string> _summaryErrors = [];
+    private bool _submitting;
+
+    protected override string PageTitle => _survey?.Title ?? "Ankieta";
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _models.Clear();
+        _errors.Clear();
+        _summaryErrors.Clear();
+
+        _survey = await ActiveSurveyQuery.GetActiveAsync(cancellationToken);
+        if (_survey is null)
+        {
+            _questions = [];
+            return;
+        }
+
+        _questions = await QuestionQuery.GetQuestionsAsync(_survey.SurveyId, cancellationToken);
+        foreach (var question in _questions)
+        {
+            _models[question.QuestionId] = new AnswerFormModel(question.QuestionId);
+        }
+    }
+
+    private string? GetError(int questionId) => _errors.GetValueOrDefault(questionId);
+
+    private void OnAnswerChanged(SurveyQuestionDto question)
+    {
+        if (!_errors.ContainsKey(question.QuestionId))
+        {
+            return;
+        }
+
+        var result = Validator.Validate(_models[question.QuestionId].ToDto(), question);
+        if (result.IsValid)
+        {
+            _errors.Remove(question.QuestionId);
+        }
+        else
+        {
+            _errors[question.QuestionId] = result.Errors[0];
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_survey is null || _submitting)
+        {
+            return;
+        }
+
+        _errors.Clear();
+        _summaryErrors.Clear();
+
+        foreach (var question in _questions)
+        {
+            var result = Validator.Validate(_models[question.QuestionId].ToDto(), question);
+            if (!result.IsValid)
+            {
+                _errors[question.QuestionId] = result.Errors[0];
+            }
+        }
+
+        if (_errors.Count > 0)
+        {
+            _summaryErrors.Add($"Uzupełnij wymagane odpowiedzi ({_errors.Count}).");
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var answers = _questions.Select(q => _models[q.QuestionId].ToDto()).ToList();
+            var outcome = await SubmissionService.SubmitAsync(
+                new SubmitSurveyResponseDto(_survey.SurveyId, answers),
+                PageCancellation);
+
+            if (outcome.Succeeded)
+            {
+                Navigation.NavigateTo("/dziekujemy");
+                return;
+            }
+
+            _summaryErrors.AddRange(outcome.Validation.Errors);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogError(ex, "Błąd zapisu odpowiedzi ankiety.");
+            _summaryErrors.Add("Nie udało się zapisać odpowiedzi. Spróbuj ponownie za chwilę.");
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

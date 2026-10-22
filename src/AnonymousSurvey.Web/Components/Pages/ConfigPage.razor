@@ -1,0 +1,160 @@
+@page "/konfiguracja/{Token}"
+@inherits BasePage
+@inject ISurveyConfigService ConfigService
+
+<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
+    @if (_config is not null)
+    {
+        <p class="lead">Wybierz pytania z puli i ustaw ich kolejność. Zmiany obowiązują od razu po zapisaniu.</p>
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="state-box @(_messageIsError ? "state-box--error" : "state-box--success")" role="status">
+                <p>@_message</p>
+            </div>
+        }
+
+        <div class="config-grid">
+            <section class="config-panel">
+                <h2 class="section-title">Pytania w ankiecie (@_assigned.Count)</h2>
+                @if (_assigned.Count == 0)
+                {
+                    <p class="muted">Brak pytań. Dodaj co najmniej jedno z puli.</p>
+                }
+                <ol class="config-list">
+                    @for (var i = 0; i < _assigned.Count; i++)
+                    {
+                        var index = i;
+                        var item = _assigned[index];
+                        <li class="config-item" @key="item.QuestionId">
+                            <div class="config-item__text">
+                                <span>@item.Text</span>
+                                <small class="badge">@TypeLabel(item.Type)</small>
+                            </div>
+                            <div class="config-item__actions">
+                                <DxButton IconCssClass="" Text="↑" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index > 0" Click="() => Move(index, -1)" aria-label="Przesuń w górę" />
+                                <DxButton Text="↓" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index < _assigned.Count - 1" Click="() => Move(index, 1)" aria-label="Przesuń w dół" />
+                                <DxButton Text="Usuń" RenderStyle="ButtonRenderStyle.Danger" Click="() => Remove(index)" />
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </section>
+
+            <section class="config-panel">
+                <h2 class="section-title">Pula pytań</h2>
+                @if (AvailablePool.Count == 0)
+                {
+                    <p class="muted">Wszystkie pytania z puli są już w ankiecie.</p>
+                }
+                <ul class="config-list">
+                    @foreach (var item in AvailablePool)
+                    {
+                        <li class="config-item" @key="item.QuestionId">
+                            <div class="config-item__text">
+                                <span>@item.Text</span>
+                                <small class="badge">@TypeLabel(item.Type)</small>
+                            </div>
+                            <div class="config-item__actions">
+                                <DxButton Text="Dodaj" RenderStyle="ButtonRenderStyle.Primary" Click="() => Add(item)" />
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </div>
+
+        <div class="form-actions">
+            <DxButton Text="@(_saving ? "Zapisywanie…" : "Zapisz konfigurację")"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="!_saving"
+                      Click="SaveAsync" />
+            <DxButton Text="Cofnij zmiany" RenderStyle="ButtonRenderStyle.Secondary" Enabled="!_saving" Click="ReloadAsync" />
+        </div>
+    }
+</PageShell>
+
+@code {
+    [Parameter] public string Token { get; set; } = string.Empty;
+
+    private SurveyConfigDto? _config;
+    private List<SurveyConfigQuestionDto> _assigned = [];
+    private string? _message;
+    private bool _messageIsError;
+    private bool _saving;
+
+    protected override string PageTitle => _config is null ? "Konfiguracja ankiety" : $"Konfiguracja — {_config.Title}";
+
+    private List<QuestionPoolItemDto> AvailablePool =>
+        _config is null
+            ? []
+            : _config.QuestionPool.Where(p => _assigned.All(a => a.QuestionId != p.QuestionId)).ToList();
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _message = null;
+        _config = await ConfigService.GetByConfigTokenAsync(Token, cancellationToken);
+        IsNotFound = _config is null;
+        _assigned = _config is null ? [] : _config.AssignedQuestions.OrderBy(q => q.SortOrder).ToList();
+    }
+
+    private void Move(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= _assigned.Count)
+        {
+            return;
+        }
+
+        (_assigned[index], _assigned[target]) = (_assigned[target], _assigned[index]);
+    }
+
+    private void Remove(int index) => _assigned.RemoveAt(index);
+
+    private void Add(QuestionPoolItemDto item) =>
+        _assigned.Add(new SurveyConfigQuestionDto(item.QuestionId, item.Text, item.Type, _assigned.Count + 1));
+
+    private async Task SaveAsync()
+    {
+        if (_config is null || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        _message = null;
+        try
+        {
+            var update = new UpdateSurveyConfigDto(
+                _config.SurveyId,
+                _assigned.Select((q, i) => new SurveyConfigAssignmentDto(q.QuestionId, i + 1)).ToList());
+
+            var result = await ConfigService.UpdateAssignmentsAsync(Token, update, PageCancellation);
+            _messageIsError = !result.IsValid;
+            _message = result.IsValid ? "Konfiguracja została zapisana." : string.Join(" ", result.Errors);
+
+            if (result.IsValid)
+            {
+                _assigned = _assigned.Select((q, i) => q with { SortOrder = i + 1 }).ToList();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogError(ex, "Błąd zapisu konfiguracji ankiety.");
+            _messageIsError = true;
+            _message = "Nie udało się zapisać konfiguracji. Spróbuj ponownie.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string TypeLabel(QuestionType type) => type switch
+    {
+        QuestionType.Scale => "Skala 1–5",
+        QuestionType.Open => "Otwarte",
+        QuestionType.YesNo => "Tak/Nie",
+        _ => type.ToString()
+    };
+}

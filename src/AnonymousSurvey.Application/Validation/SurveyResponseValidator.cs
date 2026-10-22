@@ -7,6 +7,8 @@ namespace AnonymousSurvey.Application.Validation;
 
 public sealed class SurveyResponseValidator : ISurveyResponseValidator
 {
+    public const int MaxTextLength = 2000;
+
     public ValidationResult Validate(AnswerInputDto answer, SurveyQuestionDto question)
     {
         if (answer.QuestionId != question.QuestionId)
@@ -91,6 +93,12 @@ public sealed class SurveyResponseValidator : ISurveyResponseValidator
         if (string.IsNullOrWhiteSpace(answer.TextValue))
         {
             return ValidationResult.Failure($"Uzupełnij odpowiedź tekstową dla pytania: „{question.Text}”.");
+        }
+
+        if (answer.TextValue.Length > MaxTextLength)
+        {
+            return ValidationResult.Failure(
+                $"Odpowiedź na pytanie „{question.Text}” może mieć maksymalnie {MaxTextLength} znaków.");
         }
 
         if (answer.ScaleValue is not null || answer.BoolValue is not null)

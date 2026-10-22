@@ -5,6 +5,10 @@
     <ProjectReference Include="..\AnonymousSurvey.Infrastructure\AnonymousSurvey.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DevExpress.Blazor" Version="26.1.5" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

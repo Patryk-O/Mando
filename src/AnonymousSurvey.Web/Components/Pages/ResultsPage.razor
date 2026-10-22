@@ -1,0 +1,138 @@
+@page "/wyniki/{Token}"
+@inherits BasePage
+@inject ISurveyResultsQuery ResultsQuery
+
+<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
+    @if (_results is not null)
+    {
+        <div class="stat-row">
+            <div class="stat">
+                <span class="stat__value">@_results.TotalSessions</span>
+                <span class="stat__label">Wypełnionych ankiet</span>
+            </div>
+            <DxButton Text="Odśwież" RenderStyle="ButtonRenderStyle.Secondary" Click="ReloadAsync" />
+        </div>
+
+        @if (_results.TotalSessions == 0)
+        {
+            <div class="state-box">
+                <p>Nie ma jeszcze żadnych odpowiedzi.</p>
+            </div>
+        }
+        else
+        {
+            <h2 class="section-title">Podsumowanie</h2>
+            <div class="aggregate-list">
+                @foreach (var item in _results.ScaleAggregates)
+                {
+                    <article class="aggregate">
+                        <h3>@item.Text</h3>
+                        <p class="aggregate__value">Średnia: <strong>@item.Average.ToString("0.00")</strong> / 5</p>
+                        @foreach (var step in item.Distribution.OrderByDescending(d => d.Key))
+                        {
+                            <div class="bar-row">
+                                <span class="bar-row__label">@step.Key</span>
+                                <div class="bar"><div class="bar__fill" style="width:@Percent(step.Value, item.Distribution.Values.Sum())%"></div></div>
+                                <span class="bar-row__count">@step.Value</span>
+                            </div>
+                        }
+                    </article>
+                }
+
+                @foreach (var item in _results.YesNoAggregates)
+                {
+                    var total = item.YesCount + item.NoCount;
+                    <article class="aggregate">
+                        <h3>@item.Text</h3>
+                        <div class="bar-row">
+                            <span class="bar-row__label">Tak</span>
+                            <div class="bar"><div class="bar__fill" style="width:@Percent(item.YesCount, total)%"></div></div>
+                            <span class="bar-row__count">@item.YesCount</span>
+                        </div>
+                        <div class="bar-row">
+                            <span class="bar-row__label">Nie</span>
+                            <div class="bar"><div class="bar__fill bar__fill--alt" style="width:@Percent(item.NoCount, total)%"></div></div>
+                            <span class="bar-row__count">@item.NoCount</span>
+                        </div>
+                    </article>
+                }
+
+                @foreach (var item in _results.OpenAggregates)
+                {
+                    <article class="aggregate">
+                        <h3>@item.Text</h3>
+                        <p class="aggregate__value">Odpowiedzi tekstowych: <strong>@item.ResponseCount</strong></p>
+                    </article>
+                }
+            </div>
+
+            <h2 class="section-title">Wszystkie odpowiedzi</h2>
+            <DxGrid Data="_rows"
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="@(new[] { 10, 15, 30, 50 })"
+                    ShowFilterRow="true"
+                    CssClass="results-grid">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ResultRow.SubmittedAt)" Caption="Data" DisplayFormat="dd.MM.yyyy HH:mm" Width="160px" />
+                    <DxGridDataColumn FieldName="@nameof(ResultRow.SessionShortId)" Caption="Zgłoszenie" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(ResultRow.Question)" Caption="Pytanie" />
+                    <DxGridDataColumn FieldName="@nameof(ResultRow.Answer)" Caption="Odpowiedź" />
+                </Columns>
+            </DxGrid>
+        }
+    }
+</PageShell>
+
+@code {
+    [Parameter] public string Token { get; set; } = string.Empty;
+
+    private SurveyResultsDto? _results;
+    private List<ResultRow> _rows = [];
+
+    protected override string PageTitle => _results is null ? "Wyniki ankiety" : $"Wyniki — {_results.SurveyTitle}";
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _results = await ResultsQuery.GetByResultsTokenAsync(Token, cancellationToken);
+        IsNotFound = _results is null;
+        _rows = _results is null ? [] : BuildRows(_results);
+    }
+
+    private static double Percent(int value, int total) =>
+        total == 0 ? 0 : Math.Round(value * 100.0 / total, 1, MidpointRounding.AwayFromZero);
+
+    private static List<ResultRow> BuildRows(SurveyResultsDto results)
+    {
+        var questions = new Dictionary<int, (string Text, QuestionType Type)>();
+        foreach (var s in results.ScaleAggregates) questions[s.QuestionId] = (s.Text, QuestionType.Scale);
+        foreach (var y in results.YesNoAggregates) questions[y.QuestionId] = (y.Text, QuestionType.YesNo);
+        foreach (var o in results.OpenAggregates) questions[o.QuestionId] = (o.Text, QuestionType.Open);
+
+        var rows = new List<ResultRow>();
+        foreach (var response in results.RawResponses)
+        {
+            var submittedAt = DateTime.SpecifyKind(response.SubmittedAtUtc, DateTimeKind.Utc).ToLocalTime();
+            foreach (var answer in response.Answers.OrderBy(a => a.QuestionId))
+            {
+                if (!questions.TryGetValue(answer.QuestionId, out var question))
+                {
+                    continue;
+                }
+
+                var display = question.Type switch
+                {
+                    QuestionType.Scale => answer.ScaleValue?.ToString() ?? "—",
+                    QuestionType.YesNo => answer.BoolValue switch { true => "Tak", false => "Nie", _ => "—" },
+                    _ => answer.TextValue ?? "—"
+                };
+
+                rows.Add(new ResultRow(submittedAt, response.SessionId.ToString("N")[..8], question.Text, display));
+            }
+        }
+
+        return rows;
+    }
+
+    private sealed record ResultRow(DateTime SubmittedAt, string SessionShortId, string Question, string Answer);
+}

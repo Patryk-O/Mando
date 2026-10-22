@@ -1,0 +1,25 @@
+<fieldset class="question-card @(string.IsNullOrEmpty(Error) ? null : "question-card--invalid")">
+    <legend class="question-card__legend">
+        <span class="question-card__number">@Number</span>
+        <span class="question-card__text">@Text</span>
+    </legend>
+
+    <div class="question-card__body">
+        @ChildContent
+    </div>
+
+    @if (!string.IsNullOrEmpty(Error))
+    {
+        <p class="question-card__error" role="alert">@Error</p>
+    }
+</fieldset>
+
+@code {
+    [Parameter] public int Number { get; set; }
+
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
