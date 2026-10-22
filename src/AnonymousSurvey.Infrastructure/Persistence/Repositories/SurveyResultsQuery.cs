@@ -1,6 +1,7 @@
 using AnonymousSurvey.Application.Abstractions;
 using AnonymousSurvey.Application.Dtos;
 using AnonymousSurvey.Domain.Enums;
+using AnonymousSurvey.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnonymousSurvey.Infrastructure.Persistence.Repositories;
@@ -16,9 +17,10 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
             return null;
         }
 
-        var survey = await dbContext.Surveys
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.ResultsAccessToken == resultsAccessToken, cancellationToken);
+        var survey = await SurveyWriteSupport.FindByResultsTokenAsync(
+            dbContext,
+            resultsAccessToken,
+            cancellationToken);
 
         if (survey is null)
         {
@@ -41,7 +43,7 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
         var assigned = await dbContext.SurveyQuestions
             .AsNoTracking()
             .Where(sq => sq.SurveyId == survey.Id)
-            .Select(sq => new { sq.QuestionId, sq.SortOrder })
+            .Select(sq => new { sq.QuestionId, sq.SortOrder, sq.AddedAtUtc })
             .ToListAsync(cancellationToken);
 
         var questionIds = assigned.Select(a => a.QuestionId)
@@ -50,6 +52,7 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
 
         var assignedIds = assigned.Select(a => a.QuestionId).ToHashSet();
         var sortOrders = assigned.ToDictionary(a => a.QuestionId, a => a.SortOrder);
+        var addedAt = assigned.ToDictionary(a => a.QuestionId, a => a.AddedAtUtc);
 
         var questions = (await dbContext.Questions
                 .AsNoTracking()
@@ -66,6 +69,14 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
         foreach (var question in questions)
         {
             var questionAnswers = answers.Where(a => a.QuestionId == question.Id).ToList();
+            var answeredSessions = questionAnswers
+                .Where(answer => IsAnswered(question.Type, answer.ScaleValue, answer.BoolValue, answer.TextValue))
+                .Select(answer => answer.SessionId)
+                .ToHashSet();
+            var isAssigned = assignedIds.Contains(question.Id);
+            var eligible = isAssigned
+                ? sessions.Count(session => session.SubmittedAtUtc >= addedAt[question.Id] || answeredSessions.Contains(session.Id))
+                : answeredSessions.Count;
 
             switch (question.Type)
             {
@@ -79,8 +90,8 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
                         values.Count == 0 ? 0 : Math.Round(values.Average(), 2),
                         distribution,
                         values.Count,
-                        sessions.Count,
-                        assignedIds.Contains(question.Id)));
+                        eligible,
+                        isAssigned));
                     break;
 
                 case QuestionType.YesNo:
@@ -90,18 +101,19 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
                         questionAnswers.Count(a => a.BoolValue == true),
                         questionAnswers.Count(a => a.BoolValue == false),
                         questionAnswers.Count(a => a.BoolValue.HasValue),
-                        sessions.Count,
-                        assignedIds.Contains(question.Id)));
+                        eligible,
+                        isAssigned));
                     break;
 
                 case QuestionType.Open:
+                    var openAnswered = questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue));
                     open.Add(new OpenQuestionAggregateDto(
                         question.Id,
                         question.Text,
-                        questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue)),
-                        questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue)),
-                        sessions.Count,
-                        assignedIds.Contains(question.Id)));
+                        openAnswered,
+                        openAnswered,
+                        eligible,
+                        isAssigned));
                     break;
             }
         }
@@ -118,4 +130,12 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
 
         return new SurveyResultsDto(survey.Id, survey.Title, sessions.Count, scale, yesNo, open, rows);
     }
+
+    private static bool IsAnswered(QuestionType type, int? scaleValue, bool? boolValue, string? textValue) => type switch
+    {
+        QuestionType.Scale => scaleValue.HasValue,
+        QuestionType.YesNo => boolValue.HasValue,
+        QuestionType.Open => !string.IsNullOrWhiteSpace(textValue),
+        _ => scaleValue.HasValue || boolValue.HasValue || !string.IsNullOrWhiteSpace(textValue)
+    };
 }
