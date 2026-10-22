@@ -8,8 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AnonymousSurvey.IntegrationTests;
 
-[Collection(LocalDbCollection.Name)]
-public class SurveyFlowTests(LocalDbFixture fixture)
+public class SurveyFlowTests(LocalDbFixture fixture) : IClassFixture<LocalDbFixture>
 {
     private const string Pending = "SM-C: ISurveyConfigService.UpdateAsync czeka na Zadanie C";
 
