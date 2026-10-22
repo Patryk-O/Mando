@@ -11,16 +11,15 @@ namespace AnonymousSurvey.IntegrationTests;
 [Collection(LocalDbCollection.Name)]
 public class SurveyFlowTests(LocalDbFixture fixture)
 {
-    private const string Pending = "SM-A/C: schemat i serwisy w przebudowie";
+    private const string Pending = "SM-C: ISurveyConfigService.UpdateAsync czeka na Zadanie C";
 
     private AsyncServiceScope NewScope() => fixture.Services.CreateAsyncScope();
 
-    private static async Task<SurveyPublicDto?> GetActiveAsync(AsyncServiceScope scope)
-    {
-        var catalog = scope.ServiceProvider.GetRequiredService<ISurveyCatalogQuery>();
-        var slug = await catalog.GetDefaultSlugAsync();
-        return slug is null ? null : await catalog.GetBySlugAsync(slug);
-    }
+    private static async Task<int> GetDefaultSurveyIdAsync(AsyncServiceScope scope) =>
+        await scope.ServiceProvider.GetRequiredService<SurveyDbContext>().Surveys
+            .Where(s => s.IsDefault)
+            .Select(s => s.Id)
+            .SingleAsync();
 
     private static List<AnswerInputDto> ValidAnswers(IEnumerable<SurveyQuestionDto> questions) =>
         questions.Select(q => q.Type switch
@@ -40,15 +39,14 @@ public class SurveyFlowTests(LocalDbFixture fixture)
             current.RowVersion,
             questionIds.Select(id => new SurveyItemInputDto(id, null, true)).ToList());
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Tvf_returns_seeded_questions_in_order_through_ef()
     {
         await using var scope = NewScope();
-        var active = await GetActiveAsync(scope);
-        Assert.NotNull(active);
+        var surveyId = await GetDefaultSurveyIdAsync(scope);
 
         var questions = await scope.ServiceProvider.GetRequiredService<ISurveyQuestionQuery>()
-            .GetQuestionsAsync(active.SurveyId);
+            .GetQuestionsAsync(surveyId);
 
         Assert.Equal(5, questions.Count);
         Assert.Equal(new[] { 1, 2, 3, 4, 5 }, questions.Select(q => q.SortOrder));
@@ -57,7 +55,7 @@ public class SurveyFlowTests(LocalDbFixture fixture)
         Assert.Contains(questions, q => q.Type == QuestionType.YesNo);
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Initializer_is_idempotent()
     {
         await using var scope = NewScope();
@@ -67,18 +65,18 @@ public class SurveyFlowTests(LocalDbFixture fixture)
         Assert.Equal(1, await db.Surveys.CountAsync());
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Submission_saves_via_stored_procedure_and_appears_in_results()
     {
         await using var scope = NewScope();
-        var active = (await GetActiveAsync(scope))!;
-        var questions = await scope.ServiceProvider.GetRequiredService<ISurveyQuestionQuery>().GetQuestionsAsync(active.SurveyId);
+        var surveyId = await GetDefaultSurveyIdAsync(scope);
+        var questions = await scope.ServiceProvider.GetRequiredService<ISurveyQuestionQuery>().GetQuestionsAsync(surveyId);
         var results = scope.ServiceProvider.GetRequiredService<ISurveyResultsQuery>();
 
         var before = (await results.GetByResultsTokenAsync(LocalDbFixture.ResultsToken))!.TotalSessions;
 
         var outcome = await scope.ServiceProvider.GetRequiredService<ISurveySubmissionService>()
-            .SubmitAsync(new SubmitSurveyResponseDto(active.SurveyId, ValidAnswers(questions)));
+            .SubmitAsync(new SubmitSurveyResponseDto(surveyId, ValidAnswers(questions)));
 
         Assert.True(outcome.Succeeded);
 
@@ -90,31 +88,31 @@ public class SurveyFlowTests(LocalDbFixture fixture)
         Assert.NotEmpty(after.OpenAggregates);
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Invalid_submission_is_rejected_and_not_stored()
     {
         await using var scope = NewScope();
-        var active = (await GetActiveAsync(scope))!;
+        var surveyId = await GetDefaultSurveyIdAsync(scope);
         var results = scope.ServiceProvider.GetRequiredService<ISurveyResultsQuery>();
         var before = (await results.GetByResultsTokenAsync(LocalDbFixture.ResultsToken))!.TotalSessions;
 
         var outcome = await scope.ServiceProvider.GetRequiredService<ISurveySubmissionService>()
-            .SubmitAsync(new SubmitSurveyResponseDto(active.SurveyId, []));
+            .SubmitAsync(new SubmitSurveyResponseDto(surveyId, []));
 
         Assert.False(outcome.Succeeded);
         Assert.NotEmpty(outcome.Validation.Errors);
         Assert.Equal(before, (await results.GetByResultsTokenAsync(LocalDbFixture.ResultsToken))!.TotalSessions);
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Stored_procedure_rolls_back_when_answers_do_not_match_survey()
     {
         await using var scope = NewScope();
-        var active = (await GetActiveAsync(scope))!;
+        var surveyId = await GetDefaultSurveyIdAsync(scope);
         var db = scope.ServiceProvider.GetRequiredService<SurveyDbContext>();
         var before = await db.ResponseSessions.CountAsync();
 
-        var incomplete = new SubmitSurveyResponseDto(active.SurveyId, [new AnswerInputDto(1, 3, null, null)]);
+        var incomplete = new SubmitSurveyResponseDto(surveyId, [new AnswerInputDto(1, 3, null, null)]);
 
         await Assert.ThrowsAsync<SqlException>(() =>
             scope.ServiceProvider.GetRequiredService<ISurveyResponseSaver>().SaveAsync(incomplete));
