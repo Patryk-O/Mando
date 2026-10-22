@@ -20,4 +20,10 @@ public abstract class QuestionInputBase : ComponentBase
     [Parameter] public EventCallback OnAnswerChanged { get; set; }
 
     protected Task NotifyChangedAsync() => OnAnswerChanged.InvokeAsync();
+
+    protected async Task ClearAnswerAsync()
+    {
+        Model.Clear();
+        await NotifyChangedAsync();
+    }
 }

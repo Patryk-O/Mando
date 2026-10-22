@@ -1,6 +1,6 @@
 @inherits QuestionInputBase
 
-<QuestionCard Number="Number" Text="@Question.Text" Error="@Error">
+<QuestionCard Number="Number" Text="@Question.Text" Error="@Error" IsRequired="Question.IsRequired">
     <DxMemo Text="@Model.TextValue"
             TextChanged="@((string? text) => OnTextChanged(text))"
             BindValueMode="BindValueMode.OnInput"

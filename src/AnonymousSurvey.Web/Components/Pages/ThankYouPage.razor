@@ -1,17 +1,31 @@
 @page "/dziekujemy"
+@page "/ankieta/{Slug}/dziekujemy"
 @inherits BasePage
 
-<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" IsNotFound="IsNotFound">
-    <div class="thank-you">
-        <div class="thank-you__icon" aria-hidden="true">✓</div>
-        <p class="lead">Twoje odpowiedzi zostały zapisane anonimowo.</p>
-        <p class="muted">Możesz zamknąć tę stronę.</p>
-        <a class="link-button" href="/">Wróć do ankiety</a>
-    </div>
-</PageShell>
+@if (!string.IsNullOrEmpty(Slug))
+{
+    <PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" IsNotFound="IsNotFound">
+        <div class="thank-you">
+            <div class="thank-you__icon" aria-hidden="true">✓</div>
+            <p class="lead">Twoje odpowiedzi zostały zapisane anonimowo.</p>
+            <p class="muted">Możesz zamknąć tę stronę.</p>
+            <a class="link-button" href="@($"/ankieta/{Slug}")">Wróć do ankiety</a>
+        </div>
+    </PageShell>
+}
 
 @code {
+    [Parameter] public string? Slug { get; set; }
+
     protected override string PageTitle => "Dziękujemy!";
 
-    protected override Task LoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    protected override Task LoadAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(Slug))
+        {
+            Navigation.NavigateTo("/", replace: true);
+        }
+
+        return Task.CompletedTask;
+    }
 }
