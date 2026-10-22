@@ -15,6 +15,9 @@
 .PARAMETER Filter
   Filtr tytułów testów Playwright (--grep).
 
+.PARAMETER AppRoot
+  Katalog z kodem aplikacji (src\AnonymousSurvey.Web). Domyślnie to repozytorium; przydatne do sprawdzenia skryptu na innej wersji aplikacji.
+
 .PARAMETER StartupTimeoutSeconds
   Maksymalny czas oczekiwania na start aplikacji (z kompilacją).
 #>
@@ -22,12 +25,14 @@
 param(
     [int]$Port = 0,
     [string]$Filter,
-    [int]$StartupTimeoutSeconds = 180
+    [int]$StartupTimeoutSeconds = 180,
+    [string]$AppRoot
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $e2eDir = Join-Path $repoRoot 'tests\e2e'
+$appRoot = if ($AppRoot) { $AppRoot } else { $repoRoot }
 $sqlServer = '(localdb)\mssqllocaldb'
 
 $nodeDir = 'C:\Users\MAX\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.19.0-win-x64'
@@ -97,6 +102,7 @@ $savedEnv = @{
     ASPNETCORE_ENVIRONMENT      = $env:ASPNETCORE_ENVIRONMENT
     BASE_URL                    = $env:BASE_URL
     E2E_DB                      = $env:E2E_DB
+    NO_COLOR                    = $env:NO_COLOR
 }
 
 $app = $null
@@ -118,7 +124,7 @@ try {
     $env:E2E_DB = $dbName
 
     $app = Start-Process -FilePath 'dotnet' -PassThru -WindowStyle Hidden `
-        -WorkingDirectory $repoRoot `
+        -WorkingDirectory $appRoot `
         -RedirectStandardOutput $outLog -RedirectStandardError $errLog `
         -ArgumentList @('run', '--project', 'src\AnonymousSurvey.Web', '--no-launch-profile', '--urls', $baseUrl)
 
@@ -152,8 +158,13 @@ try {
 
         $playwrightArgs = @('playwright', 'test')
         if ($Filter) { $playwrightArgs += @('--grep', $Filter) }
+        # Stderr z Node (np. ostrzeżenie NO_COLOR/FORCE_COLOR) nie może przerywać skryptu przy przekierowaniu 2>&1 u wywołującego.
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $env:NO_COLOR = $null
         & npx @playwrightArgs
         $testExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $previousPreference
     }
     finally {
         Pop-Location
