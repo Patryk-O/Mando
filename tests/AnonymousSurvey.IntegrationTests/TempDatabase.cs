@@ -115,7 +115,6 @@ public sealed class TempDatabase : IAsyncDisposable
         }
         finally
         {
-            SqlConnection.ClearAllPools();
             await DropAsync(Name);
         }
     }
@@ -180,6 +179,13 @@ public sealed class TempDatabase : IAsyncDisposable
     private static async Task DropAsync(string databaseName)
     {
         var quoted = Quote(databaseName);
+        // Czyścimy pulę tylko tego connection stringa. ClearAllPools zrywał połączenia
+        // równoległych klas testowych w tym samym procesie.
+        using (var pooled = new SqlConnection(BuildConnectionString(databaseName)))
+        {
+            SqlConnection.ClearPool(pooled);
+        }
+
         await ExecuteOnMasterAsync(
             $"IF DB_ID(N'{databaseName}') IS NOT NULL BEGIN ALTER DATABASE {quoted} SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE {quoted}; END");
     }
