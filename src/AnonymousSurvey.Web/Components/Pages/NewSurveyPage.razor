@@ -1,0 +1,190 @@
+@page "/nowa-ankieta"
+@inherits BasePage
+@inject ISurveyAuthoringService Authoring
+
+<UnsavedChangesLock Enabled="HasUnsavedChanges" />
+
+<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync">
+    <div class="editor-page">
+        @if (_created is not null)
+        {
+            <p class="lead">Ankieta <span class="created-title">@_createdTitle</span> została zapisana.</p>
+            <div class="state-box editor-warning" role="status">
+                <p>Zapisz te linki — nie będą ponownie wyświetlane. Kto zna link do konfiguracji, może zmieniać ankietę.</p>
+            </div>
+            <div class="access-links">
+                <AccessLinkRow Label="Link publiczny" Url="@Absolute($"/ankieta/{_created.Slug}")" />
+                <AccessLinkRow Label="Wyniki" Url="@Absolute($"/wyniki/{_created.ResultsAccessToken}")" />
+                <AccessLinkRow Label="Konfiguracja" Url="@Absolute($"/konfiguracja/{_created.ConfigAccessToken}")" />
+            </div>
+        }
+        else if (_model is not null)
+        {
+            <p class="lead">Podaj tytuł i wybierz pytania. Nowe pytanie trafi tylko do tej ankiety i do wspólnej puli.</p>
+
+            @if (_status == SurveyStatus.Draft)
+            {
+                <div class="state-box" role="status">
+                    <p>Szkic — niewidoczny publicznie. Zmień status na Aktywna, aby opublikować.</p>
+                </div>
+            }
+
+            @if (_errors.Count > 0)
+            {
+                <div class="state-box state-box--error" role="alert">
+                    <ul>
+                        @foreach (var error in _errors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <SurveyMetadataForm @key="@($"meta-{_formVersion}")"
+                                Title="@_title"
+                                TitleChanged="@((string value) => _title = value)"
+                                Description="@_description"
+                                DescriptionChanged="@((string value) => _description = value)"
+                                Status="_status"
+                                StatusChanged="@((SurveyStatus value) => _status = value)"
+                                SlugEditable="true"
+                                Slug="@_slug"
+                                SlugChanged="@((string value) => _slug = value)" />
+
+            <SurveyItemsEditor @key="@($"items-{_formVersion}")"
+                               Model="_model"
+                               Status="_status"
+                               OnChanged="NotifyChanged" />
+
+            @if (HasUnsavedChanges)
+            {
+                <p class="editor-dirty" role="status">Są niezapisane zmiany.</p>
+            }
+
+            <div class="form-actions">
+                <DxButton Text="@(_saving ? "Tworzenie…" : "Utwórz ankietę")"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          SubmitFormOnClick="false"
+                          Enabled="!_saving"
+                          Click="CreateAsync" />
+                <DxButton Text="Cofnij zmiany"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          SubmitFormOnClick="false"
+                          Enabled="!_saving"
+                          Click="Undo" />
+            </div>
+        }
+    </div>
+</PageShell>
+
+@code {
+    private SurveyItemsEditorModel? _model;
+    private CreateSurveyResultDto? _created;
+    private string _createdTitle = "";
+    private string _title = "";
+    private string _description = "";
+    private string _slug = "";
+    private SurveyStatus _status = SurveyStatus.Draft;
+    private string _savedTitle = "";
+    private string _savedDescription = "";
+    private string _savedSlug = "";
+    private SurveyStatus _savedStatus = SurveyStatus.Draft;
+    private readonly List<string> _errors = [];
+    private bool _saving;
+    private int _formVersion;
+
+    protected override string PageTitle => _created is null ? "Nowa ankieta" : "Ankieta została utworzona";
+
+    private bool HasUnsavedChanges =>
+        _created is null && (_model?.IsDirty == true || MetadataChanged());
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var pool = await Authoring.GetQuestionPoolAsync(cancellationToken);
+        _model = SurveyItemsEditorModel.ForNewSurvey(pool);
+        _title = "";
+        _description = "";
+        _slug = "";
+        _status = SurveyStatus.Draft;
+        CaptureMetadata();
+        _formVersion++;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_model is null || _saving || _created is not null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _errors.Clear();
+        try
+        {
+            var outcome = await Authoring.CreateAsync(
+                new CreateSurveyDto(
+                    _title,
+                    string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    string.IsNullOrWhiteSpace(_slug) ? null : _slug.Trim(),
+                    _status,
+                    _model.ToInputs()),
+                PageCancellation);
+
+            if (!outcome.Succeeded || outcome.Result is null)
+            {
+                _errors.AddRange(outcome.Validation.Errors);
+                return;
+            }
+
+            _createdTitle = _title.Trim();
+            _created = outcome.Result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogError(ex, "Błąd tworzenia ankiety.");
+            _errors.Add("Nie udało się utworzyć ankiety. Spróbuj ponownie.");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Undo()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _model.Reset();
+        _title = _savedTitle;
+        _description = _savedDescription;
+        _slug = _savedSlug;
+        _status = _savedStatus;
+        _errors.Clear();
+        _formVersion++;
+    }
+
+    private void CaptureMetadata()
+    {
+        _savedTitle = _title;
+        _savedDescription = _description;
+        _savedSlug = _slug;
+        _savedStatus = _status;
+    }
+
+    private bool MetadataChanged() =>
+        !string.Equals(Normalize(_title), Normalize(_savedTitle), StringComparison.Ordinal)
+        || !string.Equals(Normalize(_description), Normalize(_savedDescription), StringComparison.Ordinal)
+        || !string.Equals(Normalize(_slug), Normalize(_savedSlug), StringComparison.Ordinal)
+        || _status != _savedStatus;
+
+    private string Absolute(string relative) =>
+        $"{Navigation.BaseUri.TrimEnd('/')}/{relative.TrimStart('/')}";
+
+    private static string Normalize(string? value) => value?.Trim() ?? "";
+
+    private Task NotifyChanged() => Task.CompletedTask;
+}

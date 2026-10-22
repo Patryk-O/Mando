@@ -1,0 +1,182 @@
+<div class="survey-editor">
+    @if (Model.ResponseCount > 0)
+    {
+        <p class="editor-warning" role="status">@ResponseWarning</p>
+    }
+    @if (!Model.CanAddMore)
+    {
+        <p class="editor-warning" role="status">Osiągnięto limit 30 pytań w ankiecie.</p>
+    }
+    @if (Status == SurveyStatus.Active && Model.Items.Count == 0)
+    {
+        <p class="editor-warning" role="status">Ankieta aktywna musi mieć co najmniej jedno pytanie.</p>
+    }
+    @if (!string.IsNullOrEmpty(_removeWarning))
+    {
+        <p class="editor-warning" role="status">@_removeWarning</p>
+    }
+
+    <div class="config-grid">
+        <section class="config-panel" aria-label="Pytania w ankiecie">
+            <h2 class="section-title">Pytania w ankiecie (@Model.Items.Count)</h2>
+            @if (Model.Items.Count == 0)
+            {
+                <p class="muted">Brak pytań. Dodaj je z puli albo utwórz nowe.</p>
+            }
+            <ol class="config-list">
+                @for (var i = 0; i < Model.Items.Count; i++)
+                {
+                    var index = i;
+                    var item = Model.Items[index];
+                    <li class="config-item" @key="item">
+                        <div class="config-item__text">
+                            <span>@item.Text</span>
+                            <small class="badge">@TypeLabel(item.Type)</small>
+                            @if (item.IsNew)
+                            {
+                                <small class="badge badge--new">nowe — zapisz, aby dodać do puli</small>
+                            }
+                            @if (item.AnswerCount > 0)
+                            {
+                                <small class="badge badge--muted">@AnswerLabel(item.AnswerCount)</small>
+                            }
+                        </div>
+                        <div class="config-item__actions">
+                            <DxCheckBox T="bool"
+                                        Checked="@item.IsRequired"
+                                        CheckedChanged="@((bool value) => OnRequiredChanged(item, value))"
+                                        ValueChecked="true"
+                                        ValueUnchecked="false"
+                                        AllowIndeterminateState="false"
+                                        LabelPosition="LabelPosition.Right">
+                                Wymagane
+                            </DxCheckBox>
+                            <DxButton Text="↑"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      SubmitFormOnClick="false"
+                                      Enabled="index > 0"
+                                      Click="() => MoveAsync(index, -1)"
+                                      aria-label="Przesuń w górę" />
+                            <DxButton Text="↓"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      SubmitFormOnClick="false"
+                                      Enabled="index < Model.Items.Count - 1"
+                                      Click="() => MoveAsync(index, 1)"
+                                      aria-label="Przesuń w dół" />
+                            <DxButton Text="Usuń"
+                                      RenderStyle="ButtonRenderStyle.Danger"
+                                      SubmitFormOnClick="false"
+                                      Click="() => RemoveAsync(index)" />
+                        </div>
+                    </li>
+                }
+            </ol>
+            <NewQuestionForm Model="Model" OnChanged="OnChanged" />
+        </section>
+
+        <section class="config-panel" aria-label="Pula pytań">
+            <h2 class="section-title">Pula pytań</h2>
+            <label class="field-label" for="pool-filter">Szukaj w puli</label>
+            <DxTextBox InputId="pool-filter"
+                       Text="@Model.PoolFilter"
+                       TextChanged="OnFilterChanged"
+                       BindValueMode="BindValueMode.OnInput"
+                       NullText="Fragment treści pytania" />
+            @if (!string.IsNullOrEmpty(_poolError))
+            {
+                <p class="editor-error" role="alert">@_poolError</p>
+            }
+            @if (Model.AvailablePool.Count == 0)
+            {
+                <p class="muted">
+                    @(string.IsNullOrWhiteSpace(Model.PoolFilter)
+                        ? "Wszystkie pytania z puli są już w ankiecie."
+                        : "Brak pytań pasujących do wyszukiwania.")
+                </p>
+            }
+            <ul class="config-list">
+                @foreach (var item in Model.AvailablePool)
+                {
+                    <li class="config-item" @key="item.QuestionId">
+                        <div class="config-item__text">
+                            <span>@item.Text</span>
+                            <small class="badge">@TypeLabel(item.Type)</small>
+                        </div>
+                        <div class="config-item__actions">
+                            <DxButton Text="Dodaj"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      SubmitFormOnClick="false"
+                                      Enabled="Model.CanAddMore"
+                                      Click="() => AddFromPoolAsync(item.QuestionId)" />
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SurveyItemsEditorModel Model { get; set; } = null!;
+
+    [Parameter] public SurveyStatus Status { get; set; }
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string? _removeWarning;
+    private string? _poolError;
+
+    private string ResponseWarning =>
+        $"Ta ankieta ma już {AnswerLabel(Model.ResponseCount)}. Usunięcie pytania lub zmiana „Wymagane” nie kasuje odpowiedzi — wyniki zachowają dane historyczne.";
+
+    private async Task OnRequiredChanged(EditableSurveyItem item, bool value)
+    {
+        item.IsRequired = value;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task MoveAsync(int index, int delta)
+    {
+        Model.Move(index, delta);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(int index)
+    {
+        if (Status == SurveyStatus.Active && Model.Items.Count == 1)
+        {
+            _removeWarning = "Ankieta aktywna musi mieć co najmniej jedno pytanie.";
+            return;
+        }
+
+        _removeWarning = null;
+        Model.Remove(index);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task AddFromPoolAsync(int questionId)
+    {
+        var result = Model.AddFromPool(questionId);
+        if (!result.IsValid)
+        {
+            _poolError = string.Join(" ", result.Errors);
+            return;
+        }
+
+        _poolError = null;
+        _removeWarning = null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private void OnFilterChanged(string? value) => Model.PoolFilter = value ?? string.Empty;
+
+    private static string AnswerLabel(int count) => count == 1 ? "1 odpowiedź" : $"{count} odpowiedzi";
+
+    private static string TypeLabel(QuestionType type) => type switch
+    {
+        QuestionType.Scale => "Skala 1–5",
+        QuestionType.Open => "Otwarte",
+        QuestionType.YesNo => "Tak/Nie",
+        _ => type.ToString()
+    };
+}

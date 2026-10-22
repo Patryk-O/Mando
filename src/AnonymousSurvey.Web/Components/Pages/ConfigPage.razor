@@ -1,154 +1,188 @@
 @page "/konfiguracja/{Token}"
 @inherits BasePage
 @inject ISurveyConfigService ConfigService
+@inject IJSRuntime JS
+
+<UnsavedChangesLock Enabled="HasUnsavedChanges" />
 
 <PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
-    @if (_config is not null)
+    @if (_config is not null && _model is not null)
     {
-        <p class="lead">Wybierz pytania z puli i ustaw ich kolejność. Zmiany obowiązują od razu po zapisaniu.</p>
+        <div class="editor-page">
+            <p class="lead">Ustal tytuł, status i pytania. Zmiany obowiązują po zapisaniu.</p>
 
-        @if (!string.IsNullOrEmpty(_message))
-        {
-            <div class="state-box @(_messageIsError ? "state-box--error" : "state-box--success")" role="status">
-                <p>@_message</p>
+            @if (_status == SurveyStatus.Draft)
+            {
+                <div class="state-box" role="status">
+                    <p>Szkic — niewidoczny publicznie. Zmień status na Aktywna, aby opublikować.</p>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div class="state-box state-box--success" role="status">
+                    <p>@_message</p>
+                </div>
+            }
+
+            @if (_errors.Count > 0)
+            {
+                <div class="state-box state-box--error" role="alert">
+                    <ul>
+                        @foreach (var error in _errors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                    @if (_conflict)
+                    {
+                        <DxButton Text="Wczytaj aktualną konfigurację"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  SubmitFormOnClick="false"
+                                  Click="ConfirmReloadAsync" />
+                    }
+                </div>
+            }
+
+            <SurveyMetadataForm @key="@($"meta-{_formVersion}")"
+                                Title="@_title"
+                                TitleChanged="@((string value) => _title = value)"
+                                Description="@_description"
+                                DescriptionChanged="@((string value) => _description = value)"
+                                Status="_status"
+                                StatusChanged="@((SurveyStatus value) => _status = value)"
+                                Slug="@_config.Slug"
+                                IsDefault="_isDefault"
+                                IsDefaultChanged="@((bool value) => _isDefault = value)" />
+
+            <SurveyItemsEditor @key="@($"items-{_formVersion}")"
+                               Model="_model"
+                               Status="_status"
+                               OnChanged="NotifyChanged" />
+
+            @if (HasUnsavedChanges)
+            {
+                <p class="editor-dirty" role="status">Są niezapisane zmiany.</p>
+            }
+
+            <div class="form-actions">
+                <DxButton Text="@(_saving ? "Zapisywanie…" : "Zapisz konfigurację")"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          SubmitFormOnClick="false"
+                          Enabled="!_saving"
+                          Click="SaveAsync" />
+                <DxButton Text="Cofnij zmiany"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          SubmitFormOnClick="false"
+                          Enabled="!_saving"
+                          Click="Undo" />
             </div>
-        }
-
-        <div class="config-grid">
-            <section class="config-panel">
-                <h2 class="section-title">Pytania w ankiecie (@_assigned.Count)</h2>
-                @if (_assigned.Count == 0)
-                {
-                    <p class="muted">Brak pytań. Dodaj co najmniej jedno z puli.</p>
-                }
-                <ol class="config-list">
-                    @for (var i = 0; i < _assigned.Count; i++)
-                    {
-                        var index = i;
-                        var item = _assigned[index];
-                        <li class="config-item" @key="item.QuestionId">
-                            <div class="config-item__text">
-                                <span>@item.Text</span>
-                                <small class="badge">@TypeLabel(item.Type)</small>
-                            </div>
-                            <div class="config-item__actions">
-                                <DxButton Text="↑" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index > 0" Click="() => Move(index, -1)" aria-label="Przesuń w górę" />
-                                <DxButton Text="↓" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index < _assigned.Count - 1" Click="() => Move(index, 1)" aria-label="Przesuń w dół" />
-                                <DxButton Text="Usuń" RenderStyle="ButtonRenderStyle.Danger" Click="() => Remove(index)" />
-                            </div>
-                        </li>
-                    }
-                </ol>
-            </section>
-
-            <section class="config-panel">
-                <h2 class="section-title">Pula pytań</h2>
-                @if (AvailablePool.Count == 0)
-                {
-                    <p class="muted">Wszystkie pytania z puli są już w ankiecie.</p>
-                }
-                <ul class="config-list">
-                    @foreach (var item in AvailablePool)
-                    {
-                        <li class="config-item" @key="item.QuestionId">
-                            <div class="config-item__text">
-                                <span>@item.Text</span>
-                                <small class="badge">@TypeLabel(item.Type)</small>
-                            </div>
-                            <div class="config-item__actions">
-                                <DxButton Text="Dodaj" RenderStyle="ButtonRenderStyle.Primary" Click="() => Add(item)" />
-                            </div>
-                        </li>
-                    }
-                </ul>
-            </section>
-        </div>
-
-        <div class="form-actions">
-            <DxButton Text="@(_saving ? "Zapisywanie…" : "Zapisz konfigurację")"
-                      RenderStyle="ButtonRenderStyle.Primary"
-                      Enabled="!_saving"
-                      Click="SaveAsync" />
-            <DxButton Text="Cofnij zmiany" RenderStyle="ButtonRenderStyle.Secondary" Enabled="!_saving" Click="ReloadAsync" />
         </div>
     }
 </PageShell>
 
 @code {
+    private const string ReloadConfirm = "Niezapisane zmiany przepadną. Wczytać aktualną konfigurację?";
+
     [Parameter] public string Token { get; set; } = string.Empty;
 
     private SurveyConfigDto? _config;
-    private List<SurveyConfigQuestionDto> _assigned = [];
+    private SurveyItemsEditorModel? _model;
+    private string? _loadedToken;
+    private string _title = "";
+    private string _description = "";
+    private SurveyStatus _status = SurveyStatus.Draft;
+    private bool _isDefault;
+    private string _savedTitle = "";
+    private string _savedDescription = "";
+    private SurveyStatus _savedStatus = SurveyStatus.Draft;
+    private bool _savedIsDefault;
     private string? _message;
-    private bool _messageIsError;
+    private readonly List<string> _errors = [];
+    private bool _conflict;
     private bool _saving;
+    private int _formVersion;
 
     protected override string PageTitle => _config is null ? "Konfiguracja ankiety" : $"Konfiguracja — {_config.Title}";
 
-    private List<QuestionPoolItemDto> AvailablePool =>
-        _config is null
-            ? []
-            : _config.QuestionPool.Where(p => _assigned.All(a => a.QuestionId != p.QuestionId)).ToList();
+    private bool HasUnsavedChanges =>
+        _model?.IsDirty == true || MetadataChanged();
 
-    protected override async Task LoadAsync(CancellationToken cancellationToken)
-    {
-        _message = null;
-        _config = await ConfigService.GetByConfigTokenAsync(Token, cancellationToken);
-        IsNotFound = _config is null;
-        _assigned = _config is null ? [] : _config.AssignedQuestions.OrderBy(q => q.SortOrder).ToList();
-    }
+    protected override Task OnInitializedAsync() => Task.CompletedTask;
 
-    private void Move(int index, int delta)
+    protected override async Task OnParametersSetAsync()
     {
-        var target = index + delta;
-        if (target < 0 || target >= _assigned.Count)
+        if (string.Equals(_loadedToken, Token, StringComparison.Ordinal))
         {
             return;
         }
 
-        (_assigned[index], _assigned[target]) = (_assigned[target], _assigned[index]);
+        _loadedToken = Token;
+        _message = null;
+        _errors.Clear();
+        _conflict = false;
+        await ReloadAsync();
     }
 
-    private void Remove(int index) => _assigned.RemoveAt(index);
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _config = await ConfigService.GetByConfigTokenAsync(Token, cancellationToken);
+        IsNotFound = _config is null;
+        if (_config is null)
+        {
+            _model = null;
+            return;
+        }
 
-    private void Add(QuestionPoolItemDto item) =>
-        _assigned.Add(new SurveyConfigQuestionDto(item.QuestionId, item.Text, item.Type, _assigned.Count + 1, true, 0));
+        _title = _config.Title;
+        _description = _config.Description ?? "";
+        _status = _config.Status;
+        _isDefault = _config.IsDefault;
+        CaptureMetadata();
+        _model = SurveyItemsEditorModel.FromConfig(_config);
+        _formVersion++;
+    }
 
     private async Task SaveAsync()
     {
-        if (_config is null || _saving)
+        if (_config is null || _model is null || _saving)
         {
             return;
         }
 
         _saving = true;
         _message = null;
+        _errors.Clear();
+        _conflict = false;
         try
         {
             var update = new UpdateSurveyConfigDto(
                 _config.SurveyId,
-                _config.Title,
-                _config.Description,
-                _config.Status,
-                _config.IsDefault,
-                _config.RowVersion,
-                _assigned.Select(q => new SurveyItemInputDto(q.QuestionId, null, q.IsRequired)).ToList());
+                _title,
+                string.IsNullOrWhiteSpace(_description) ? null : _description,
+                _status,
+                _isDefault,
+                _model.RowVersion,
+                _model.ToInputs());
 
             var outcome = await ConfigService.UpdateAsync(Token, update, PageCancellation);
-            var result = outcome.Validation;
-            _messageIsError = !outcome.Succeeded;
-            _message = outcome.Succeeded ? "Konfiguracja została zapisana." : string.Join(" ", result.Errors);
-
-            if (outcome.Succeeded)
+            if (!outcome.Succeeded)
             {
-                _assigned = _assigned.Select((q, i) => q with { SortOrder = i + 1 }).ToList();
+                _conflict = outcome.IsConcurrencyConflict;
+                _errors.AddRange(outcome.Validation.Errors);
+                return;
+            }
+
+            await ReloadAsync();
+            if (LoadError is null && !IsNotFound)
+            {
+                _message = "Konfiguracja została zapisana.";
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Logger.LogError(ex, "Błąd zapisu konfiguracji ankiety.");
-            _messageIsError = true;
-            _message = "Nie udało się zapisać konfiguracji. Spróbuj ponownie.";
+            _errors.Add("Nie udało się zapisać konfiguracji. Spróbuj ponownie.");
         }
         finally
         {
@@ -156,11 +190,53 @@
         }
     }
 
-    private static string TypeLabel(QuestionType type) => type switch
+    private async Task ConfirmReloadAsync()
     {
-        QuestionType.Scale => "Skala 1–5",
-        QuestionType.Open => "Otwarte",
-        QuestionType.YesNo => "Tak/Nie",
-        _ => type.ToString()
-    };
+        var confirmed = await JS.InvokeAsync<bool>("confirm", ReloadConfirm);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _message = null;
+        _errors.Clear();
+        _conflict = false;
+        await ReloadAsync();
+    }
+
+    private void Undo()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _model.Reset();
+        _title = _savedTitle;
+        _description = _savedDescription;
+        _status = _savedStatus;
+        _isDefault = _savedIsDefault;
+        _message = null;
+        _errors.Clear();
+        _conflict = false;
+        _formVersion++;
+    }
+
+    private void CaptureMetadata()
+    {
+        _savedTitle = _title;
+        _savedDescription = _description;
+        _savedStatus = _status;
+        _savedIsDefault = _isDefault;
+    }
+
+    private bool MetadataChanged() =>
+        !string.Equals(Normalize(_title), Normalize(_savedTitle), StringComparison.Ordinal)
+        || !string.Equals(Normalize(_description), Normalize(_savedDescription), StringComparison.Ordinal)
+        || _status != _savedStatus
+        || _isDefault != _savedIsDefault;
+
+    private static string Normalize(string? value) => value?.Trim() ?? "";
+
+    private Task NotifyChanged() => Task.CompletedTask;
 }
