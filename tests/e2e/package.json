@@ -1,0 +1,16 @@
+{
+  "name": "anonymous-survey-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Testy E2E (Playwright, Edge) aplikacji ankiet anonimowych. Uruchamiaj przez scripts/run-e2e.ps1.",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
