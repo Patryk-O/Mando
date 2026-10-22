@@ -7,9 +7,9 @@ namespace AnonymousSurvey.IntegrationTests;
 
 public sealed class SqlContractFixture : IAsyncLifetime
 {
-    public TempDatabase Db { get; private set; } = null!;
+    public SqlTestDatabase Db { get; private set; } = null!;
 
-    public async Task InitializeAsync() => Db = await TempDatabase.CreateInitializedAsync();
+    public async Task InitializeAsync() => Db = await SqlTestDatabase.CreateInitializedAsync();
 
     public async Task DisposeAsync() => await Db.DisposeAsync();
 }
@@ -29,10 +29,10 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     private const int Active = 2;
     private const int Closed = 3;
 
-    private TempDatabase Db => fixture.Db;
+    private SqlTestDatabase Db => fixture.Db;
 
     private static string Json(params (int QuestionId, int? Scale, bool? Bool, string? Text)[] answers) =>
-        TempDatabase.Json(answers);
+        SqlTestDatabase.Json(answers);
 
     private static async Task<SqlException> AssertSqlErrorAsync(int number, Func<Task> action)
     {
@@ -590,7 +590,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     [Fact]
     public async Task Initializer_is_idempotent_on_new_schema()
     {
-        await using var db = await TempDatabase.CreateInitializedAsync();
+        await using var db = await SqlTestDatabase.CreateInitializedAsync();
         var schemaBefore = await SchemaFingerprint.CaptureAsync(db);
         var surveysBefore = await db.CountAsync("Survey");
         var questionsBefore = await db.CountAsync("Question");
@@ -608,7 +608,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     [Fact]
     public async Task Initializer_keeps_user_data_when_run_again()
     {
-        await using var db = await TempDatabase.CreateInitializedAsync();
+        await using var db = await SqlTestDatabase.CreateInitializedAsync();
         var (surveyId, ids) = await NewSurveyOnAsync(db, (Scale, true));
         var session = await db.SaveResponseAsync(surveyId, Json((ids[0], 4, null, null)));
 
@@ -651,7 +651,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     [Fact]
     public async Task Unique_default_index_rejects_two_defaults_but_allows_many_non_defaults()
     {
-        await using var db = await TempDatabase.CreateInitializedAsync();
+        await using var db = await SqlTestDatabase.CreateInitializedAsync();
         await db.ExecuteAsync("UPDATE dbo.Survey SET IsDefault = 0");
 
         await db.InsertSurveyAsync(isDefault: false);
@@ -665,7 +665,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     [Fact]
     public async Task Unique_default_index_rejects_switching_default_without_clearing_previous()
     {
-        await using var db = await TempDatabase.CreateInitializedAsync();
+        await using var db = await SqlTestDatabase.CreateInitializedAsync();
         var other = await db.InsertSurveyAsync();
 
         await AssertSqlErrorAsync(2601, () => db.ExecuteAsync(
@@ -860,7 +860,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
     [Fact]
     public async Task Seed_is_idempotent_when_questions_already_exist()
     {
-        await using var db = await TempDatabase.CreateInitializedAsync();
+        await using var db = await SqlTestDatabase.CreateInitializedAsync();
         var questionsBefore = await db.CountAsync("Question");
         await db.ExecuteAsync("DELETE FROM dbo.SurveyQuestion; DELETE FROM dbo.Survey;");
 
@@ -878,7 +878,7 @@ public class SqlContractTests(SqlContractFixture fixture) : IClassFixture<SqlCon
             new SqlParameter("@s", slug), new SqlParameter("@r", resultsToken), new SqlParameter("@c", configToken));
 
     private static async Task<(int SurveyId, int[] QuestionIds)> NewSurveyOnAsync(
-        TempDatabase db,
+        SqlTestDatabase db,
         params (int Type, bool Required)[] questions)
     {
         var surveyId = await db.InsertSurveyAsync();
@@ -925,6 +925,6 @@ public static class SchemaFingerprint
         ) AS s ORDER BY x
         """;
 
-    public static async Task<string> CaptureAsync(TempDatabase db) =>
+    public static async Task<string> CaptureAsync(SqlTestDatabase db) =>
         string.Join("\n", (await db.QueryAsync(Sql)).Select(r => (string)r[0]!));
 }

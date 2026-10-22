@@ -12,7 +12,7 @@ public class SqlUpgradeTests
     private const int Open = 2;
     private const int YesNo = 3;
 
-    private static async Task<int> LegacySurveyAsync(TempDatabase db, string title, bool isActive)
+    private static async Task<int> LegacySurveyAsync(SqlTestDatabase db, string title, bool isActive)
     {
         var token = Guid.NewGuid().ToString("N");
         return await db.ScalarAsync<int>(
@@ -26,7 +26,7 @@ public class SqlUpgradeTests
             new SqlParameter("@c", $"konfiguracja-{token}"));
     }
 
-    private static async Task<int> LegacyQuestionAsync(TempDatabase db, int surveyId, int type, int sortOrder)
+    private static async Task<int> LegacyQuestionAsync(SqlTestDatabase db, int surveyId, int type, int sortOrder)
     {
         var questionId = await db.InsertQuestionAsync(type);
         await db.ExecuteAsync(
@@ -36,7 +36,7 @@ public class SqlUpgradeTests
     }
 
     private static async Task<Guid> LegacySessionAsync(
-        TempDatabase db,
+        SqlTestDatabase db,
         int surveyId,
         params (int QuestionId, int? Scale, bool? Bool, string? Text)[] answers)
     {
@@ -58,7 +58,7 @@ public class SqlUpgradeTests
         return session;
     }
 
-    private static async Task<string> ResponsesSnapshotAsync(TempDatabase db)
+    private static async Task<string> ResponsesSnapshotAsync(SqlTestDatabase db)
     {
         var rows = await db.QueryAsync(
             """
@@ -69,12 +69,12 @@ public class SqlUpgradeTests
         return string.Join("\n", rows.Select(r => string.Join("|", r.Select(v => v ?? "NULL"))));
     }
 
-    private static async Task<bool> ColumnExistsAsync(TempDatabase db, string table, string column) =>
+    private static async Task<bool> ColumnExistsAsync(SqlTestDatabase db, string table, string column) =>
         await db.ScalarAsync<int>(
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t) AND name = @c",
             new SqlParameter("@t", $"dbo.{table}"), new SqlParameter("@c", column)) == 1;
 
-    private static async Task<bool> IndexExistsAsync(TempDatabase db, string table, string index) =>
+    private static async Task<bool> IndexExistsAsync(SqlTestDatabase db, string table, string index) =>
         await db.ScalarAsync<int>(
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(@t) AND name = @i",
             new SqlParameter("@t", $"dbo.{table}"), new SqlParameter("@i", index)) == 1;
@@ -82,7 +82,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_migrates_legacy_schema()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara ankieta", isActive: true);
         var q1 = await LegacyQuestionAsync(db, surveyId, Scale, 1);
         var q2 = await LegacyQuestionAsync(db, surveyId, YesNo, 2);
@@ -117,7 +117,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_marks_existing_assignments_as_added_from_the_beginning_and_resets_default_afterwards()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara", isActive: true);
         await LegacyQuestionAsync(db, surveyId, Scale, 1);
         await LegacyQuestionAsync(db, surveyId, Open, 2);
@@ -139,7 +139,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_inactive_survey_becomes_closed()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         await LegacySurveyAsync(db, "Wyłączona", isActive: false);
 
         await db.InitializeSchemaAsync();
@@ -152,7 +152,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_multiple_surveys_get_unique_slugs_and_single_default()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         await LegacySurveyAsync(db, "Pierwsza nieaktywna", isActive: false);
         await LegacySurveyAsync(db, "Druga aktywna", isActive: true);
         await LegacySurveyAsync(db, "Trzecia aktywna", isActive: true);
@@ -171,7 +171,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_picks_earliest_survey_as_default_when_none_is_active()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         await LegacySurveyAsync(db, "A", isActive: false);
         await LegacySurveyAsync(db, "B", isActive: false);
 
@@ -185,7 +185,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_of_legacy_database_without_surveys_creates_seed()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
 
         await db.InitializeSchemaAsync();
 
@@ -195,7 +195,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_twice_is_idempotent()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara", isActive: true);
         var q1 = await LegacyQuestionAsync(db, surveyId, Scale, 1);
         await LegacySessionAsync(db, surveyId, (q1, 3, null, null));
@@ -222,10 +222,10 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_result_has_same_schema_as_fresh_database()
     {
-        await using var legacy = await TempDatabase.CreateLegacyAsync();
+        await using var legacy = await SqlTestDatabase.CreateLegacyAsync();
         await LegacySurveyAsync(legacy, "Stara", isActive: true);
         await legacy.InitializeSchemaAsync();
-        await using var fresh = await TempDatabase.CreateInitializedAsync();
+        await using var fresh = await SqlTestDatabase.CreateInitializedAsync();
 
         Assert.Equal(await SchemaFingerprint.CaptureAsync(fresh), await SchemaFingerprint.CaptureAsync(legacy));
     }
@@ -233,7 +233,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_of_real_legacy_seed_keeps_seed_content()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync(withLegacySeed: true);
+        await using var db = await SqlTestDatabase.CreateLegacyAsync(withLegacySeed: true);
 
         await db.InitializeSchemaAsync();
 
@@ -257,21 +257,21 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgraded_database_accepts_responses_through_new_stored_procedure()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync(withLegacySeed: true);
+        await using var db = await SqlTestDatabase.CreateLegacyAsync(withLegacySeed: true);
         await db.InitializeSchemaAsync();
 
         var session = await db.SaveResponseAsync(
             1,
-            TempDatabase.Json((1, 4, null, null), (2, 5, null, null), (3, null, true, null), (4, null, false, null), (5, null, null, "Nic")));
+            SqlTestDatabase.Json((1, 4, null, null), (2, 5, null, null), (3, null, true, null), (4, null, false, null), (5, null, null, "Nic")));
 
         Assert.Equal(5, await db.CountAsync("Answer", $"SessionId = '{session}'"));
-        await Assert.ThrowsAsync<SqlException>(() => db.SaveResponseAsync(1, TempDatabase.Json((1, 4, null, null))));
+        await Assert.ThrowsAsync<SqlException>(() => db.SaveResponseAsync(1, SqlTestDatabase.Json((1, 4, null, null))));
     }
 
     [Fact]
     public async Task Upgrade_failure_on_duplicate_questions_throws_50010_and_leaves_database_unchanged()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara", isActive: true);
         await db.ExecuteAsync(
             "INSERT INTO dbo.Question ([Text], [Type]) VALUES (N'Duplikat', 1), (N'DUPLIKAT', 1)");
@@ -290,7 +290,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_succeeds_after_duplicates_are_removed()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         await LegacySurveyAsync(db, "Stara", isActive: true);
         await db.ExecuteAsync("INSERT INTO dbo.Question ([Text], [Type]) VALUES (N'Duplikat', 1), (N'Duplikat', 1)");
         await Assert.ThrowsAsync<SqlException>(() => db.InitializeSchemaAsync());
@@ -305,7 +305,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_failure_after_ddl_rolls_back_everything()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara", isActive: true);
         var questionId = await LegacyQuestionAsync(db, surveyId, Open, 1);
         var session = await LegacySessionAsync(db, surveyId, (questionId, null, null, null));
@@ -330,7 +330,7 @@ public class SqlUpgradeTests
     [Fact]
     public async Task Upgrade_replaces_legacy_routines()
     {
-        await using var db = await TempDatabase.CreateLegacyAsync();
+        await using var db = await SqlTestDatabase.CreateLegacyAsync();
         var surveyId = await LegacySurveyAsync(db, "Stara", isActive: true);
         await LegacyQuestionAsync(db, surveyId, Scale, 1);
         await db.InitializeSchemaAsync();

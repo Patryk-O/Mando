@@ -13,13 +13,13 @@ namespace AnonymousSurvey.IntegrationTests;
 /// z możliwością odtworzenia starego schematu (9334b2f) i uruchomienia na nim <see cref="DatabaseInitializer"/>.
 /// Prefiks nazwy jest inny niż <c>AnonymousSurvey_Test_</c>, żeby sprzątanie osieroconych baz innych strumieni nie kasowało baz w trakcie testu.
 /// </summary>
-public sealed class TempDatabase : IAsyncDisposable
+public sealed class SqlTestDatabase : IAsyncDisposable
 {
     public const string Prefix = "AnonymousSurvey_SqlTest_";
 
     private const string Server = "Server=(localdb)\\mssqllocaldb;Trusted_Connection=True;TrustServerCertificate=True";
 
-    private TempDatabase()
+    private SqlTestDatabase()
     {
         Name = $"{Prefix}{Guid.NewGuid():N}";
         ConnectionString = $"{Server};Database={Name}";
@@ -29,9 +29,9 @@ public sealed class TempDatabase : IAsyncDisposable
 
     public string ConnectionString { get; }
 
-    public static async Task<TempDatabase> CreateEmptyAsync()
+    public static async Task<SqlTestDatabase> CreateEmptyAsync()
     {
-        var database = new TempDatabase();
+        var database = new SqlTestDatabase();
         await using var connection = new SqlConnection($"{Server};Database=master");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
@@ -40,14 +40,14 @@ public sealed class TempDatabase : IAsyncDisposable
         return database;
     }
 
-    public static async Task<TempDatabase> CreateInitializedAsync()
+    public static async Task<SqlTestDatabase> CreateInitializedAsync()
     {
         var database = await CreateEmptyAsync();
         await database.InitializeSchemaAsync();
         return database;
     }
 
-    public static async Task<TempDatabase> CreateLegacyAsync(bool withLegacySeed = false)
+    public static async Task<SqlTestDatabase> CreateLegacyAsync(bool withLegacySeed = false)
     {
         var database = await CreateEmptyAsync();
         await database.RunEmbeddedScriptAsync("LegacySchema.sql");
@@ -83,7 +83,7 @@ public sealed class TempDatabase : IAsyncDisposable
 
     public async Task RunEmbeddedScriptAsync(string fileName)
     {
-        var assembly = typeof(TempDatabase).Assembly;
+        var assembly = typeof(SqlTestDatabase).Assembly;
         var resource = assembly.GetManifestResourceNames()
             .Single(n => n.EndsWith($".Resources.{fileName}", StringComparison.Ordinal));
         await using var stream = assembly.GetManifestResourceStream(resource)!;
