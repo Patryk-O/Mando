@@ -12,14 +12,24 @@
 .PARAMETER E2EFilter
   Filtr tytułu testów E2E (przekazywany jako -Filter do run-e2e.ps1).
 
+.PARAMETER E2EPort
+  Port aplikacji dla E2E. Domyślnie 5210 (strumień G). Wartość 0 wybiera wolny port z zakresu 5300-5399.
+
+.PARAMETER Mutation
+  Dodatkowo uruchamia scripts\mutation.ps1 (Stryker.NET). Wynik poniżej 80% nie przerywa skryptu — próg jest doradczy.
+
 .EXAMPLE
   powershell -File scripts\verify.ps1
   powershell -File scripts\verify.ps1 -E2E
+  powershell -File scripts\verify.ps1 -E2E -E2EPort 0
+  powershell -File scripts\verify.ps1 -Mutation
 #>
 [CmdletBinding()]
 param(
     [switch]$E2E,
-    [string]$E2EFilter
+    [string]$E2EFilter,
+    [int]$E2EPort = 5210,
+    [switch]$Mutation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -103,8 +113,13 @@ Invoke-Step 'Testy integracyjne' { dotnet test tests\AnonymousSurvey.Integration
 
 if ($E2E) {
     $e2eArgs = @{}
+    if ($E2EPort -ne 0) { $e2eArgs.Port = $E2EPort }
     if ($E2EFilter) { $e2eArgs.Filter = $E2EFilter }
     Invoke-Step 'Testy E2E (Playwright)' { & (Join-Path $PSScriptRoot 'run-e2e.ps1') @e2eArgs } 'none'
+}
+
+if ($Mutation) {
+    Invoke-Step 'Mutacje (Stryker, próg doradczy)' { & (Join-Path $PSScriptRoot 'mutation.ps1') } 'none'
 }
 
 # Informacyjnie: pozostałe bazy testowe mogą pochodzić z równolegle działających przebiegów innych agentów.
