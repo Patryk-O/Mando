@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/Config/schema.json",
+  "stryker-config": {
+    "solution": "AnonymousSurvey.sln",
+    "test-projects": [
+      "tests/AnonymousSurvey.UnitTests/AnonymousSurvey.UnitTests.csproj"
+    ],
+    "mutate": [
+      "**/SurveyResponseValidator.cs",
+      "**/SlugGenerator.cs",
+      "**/SurveyItemsEditorModel.cs"
+    ],
+    "reporters": [
+      "cleartext",
+      "html",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "verbosity": "info"
+  }
+}

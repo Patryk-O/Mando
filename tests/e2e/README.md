@@ -10,7 +10,9 @@ Zawsze przez skrypt, który przygotowuje całe środowisko:
 powershell -File scripts\run-e2e.ps1                      # wszystkie testy
 powershell -File scripts\run-e2e.ps1 -Filter "smoke"      # tylko testy z "smoke" w tytule (--grep)
 powershell -File scripts\run-e2e.ps1 -Port 5211           # własny port (domyślnie wolny z 5300-5399)
-powershell -File scripts\verify.ps1 -E2E                  # build + testy .NET + E2E
+powershell -File scripts\verify.ps1 -E2E                  # build + testy .NET + E2E (port 5210)
+powershell -File scripts\verify.ps1 -E2E -E2EPort 0        # port losowy 5300-5399
+powershell -File scripts\mutation.ps1                      # Stryker, próg doradczy ≥ 80%
 ```
 
 `run-e2e.ps1`: wybiera wolny port, tworzy bazę `AnonymousSurvey_E2E_<guid>` na LocalDB, startuje aplikację
@@ -31,7 +33,11 @@ Ręcznie (aplikacja już działa na własnej bazie): `$env:BASE_URL='http://loca
 | `fixtures.ts` | `test` z automatyczną fixture `guards` (globalne asercje) — **importuj `test`/`expect` stąd** |
 | `guards.ts` | klasa `PageGuards` (zbieranie problemów strony) i lista znanego szumu (DX1000/DevExpress trial, 404 `favicon.ico`) |
 | `db.ts` | `rows`, `scalar`, `countRows` przez `sqlcmd -S (localdb)\mssqllocaldb -d $E2E_DB` do asercji na bazie |
-| `tests/smoke.spec.ts` | smoke seedowej ankiety (jedyne miejsce z seedem; teraz `test.fixme` — patrz niżej) oraz `test.fixme` tras ze strumieni D/E |
+| `seed.ts` | przywracanie ankiety seedowej (5 pytań, Aktywna, domyślna) między plikami, które ją zmieniają |
+| `tests/smoke.spec.ts` | smoke seedowej ankiety, w tym dawne `tests/smoke-e2e` (pusty formularz, zapis, wyniki +1, tokeny, zamiana pytań) |
+| `tests/management.spec.ts` | cykl na czystej bazie: domyślna, tworzenie „Test A”, wyniki 0 z 1, invariant puli, statusy, flaga domyślna, sprzątanie |
+| `tests/public.spec.ts` | trasy publiczne, wymagane/opcjonalne, konflikt formularza, wyniki |
+| `tests/editor.spec.ts` | edytor pozycji, `/nowa-ankieta`, współbieżność konfiguracji |
 | `tests/guards.spec.ts` | dowód, że globalne asercje naprawdę failują (patrz niżej) |
 
 ## Globalne asercje (po każdym teście)
@@ -47,12 +53,12 @@ Auto-fixture `guards` failuje test, jeśli w jego trakcie:
 
 **Dowód działania:** `tests/guards.spec.ts` testuje klasę `PageGuards` (każdy rodzaj problemu → `assertClean()` rzuca z właściwym komunikatem; szum i obcy origin nie) oraz auto-fixture z `fixtures.ts` przez `test.fail()` — test, który celowo robi `console.error` / pokazuje `#blazor-error-ui` / dostaje 500, musi się wywrócić, inaczej `test.fail()` zgłosi błąd. Strony próbne serwuje `page.route`, więc te testy nie wymagają działającej aplikacji.
 
-**Po merge A / po merge C:** scenariusze seedowe są `test.fixme`, dopóki `SEED_SMOKE_PENDING_MERGE_C` w `smoke.spec.ts` jest `true`. Formularz na tej gałęzi nie ma danych: schemat SQL nie ma jeszcze kolumn modelu EF (po merge A, m.in. `Survey.Slug`, `IsRequired`), a `ISurveyCatalogQuery` rzuca `NotImplementedException` (po merge C). Wymuszenie przebiegu: `$env:E2E_SEED_SMOKE='1'`. Helper `CreateSurveyAsync` w testach integracyjnych jest pod `NewSchemaFact` i sam się uruchamia po merge A, gdy skrypty SQL zawierają `Slug`. Trasy `/ankieta/{slug}`, `/nowa-ankieta` i podziękowanie ze slugiem zostają `test.fixme` do strumieni D/E.
+`SEED_SMOKE_PENDING_MERGE_C` w `smoke.spec.ts` jest `false`: strumienie C/D/E są zmergowane, trasy `/ankieta/{slug}` i `/nowa-ankieta` istnieją, a podziękowanie jest pod `/ankieta/{slug}/dziekujemy`. Ustawienie flagi na `true` z powrotem pomija smoke seeda (chyba że `E2E_SEED_SMOKE=1`).
 
 ## Jak dodać test
 
 1. Plik `tests/<obszar>.spec.ts`, `import { test, expect } from '../fixtures';`.
-2. **Niezależność:** test sam tworzy potrzebne dane (np. przez `/nowa-ankieta` albo SQL w `db.ts`) z unikalnym slugiem (`Date.now()`/guid) i nie zakłada kolejności ani stanu po innych testach. Seed wolno wykorzystywać wyłącznie w `smoke.spec.ts`.
+2. **Niezależność:** test sam tworzy potrzebne dane (np. przez `/nowa-ankieta` albo SQL w `db.ts`) z unikalnym slugiem (`Date.now()`/guid) i nie zakłada kolejności ani stanu po innych testach. Seed wolno wykorzystywać w `smoke.spec.ts` i `management.spec.ts`; oba na końcu wołają `restoreSeedSurvey()` z `seed.ts`, a `run-e2e.ps1` i tak usuwa bazę.
 3. Asercje stanu bazy: `countRows('ResponseSession', 'SurveyId = 3')`, `scalar(...)`, `rows(...)` (baza E2E jest jednorazowa, więc można zmieniać dane).
 4. Selektory: preferuj role/etykiety (`getByRole`, `getByLabel`) i klasy już używane w aplikacji (`.question-card`, `.state-box`); czekaj przez `expect(...).toBeVisible()`, nie `waitForTimeout`.
 5. Test z oczekiwanym `console.error`/404 → `allowedProblems`; test czekający na trasę, której jeszcze nie ma → `test.fixme(...)` z komentarzem, który strumień ją dodaje.
