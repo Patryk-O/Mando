@@ -1,0 +1,122 @@
+@using AnonymousSurvey.Application.Common
+
+<div class="meta-form">
+    <div class="field">
+        <label class="field-label" for="survey-title">Tytuł</label>
+        <DxTextBox InputId="survey-title"
+                   Text="@Title"
+                   TextChanged="@((string? value) => OnTitleChanged(value))"
+                   BindValueMode="BindValueMode.OnInput"
+                   ReadOnly="ReadOnly" />
+        <div class="char-counter">@(Title?.Length ?? 0) / @SurveyLimits.MaxTitleLength</div>
+    </div>
+
+    <div class="field">
+        <label class="field-label" for="survey-description">Opis</label>
+        <DxMemo InputId="survey-description"
+                Text="@Description"
+                TextChanged="@((string? value) => OnDescriptionChanged(value))"
+                BindValueMode="BindValueMode.OnInput"
+                Rows="4"
+                ReadOnly="ReadOnly"
+                NullText="Opcjonalny opis widoczny nad pytaniami" />
+        <div class="char-counter">@(Description?.Length ?? 0) / @SurveyLimits.MaxDescriptionLength</div>
+    </div>
+
+    <div class="field">
+        <p class="field-label">Status</p>
+        <DxRadioGroup Items="Statuses"
+                      TextFieldName="@nameof(StatusOption.Label)"
+                      ValueFieldName="@nameof(StatusOption.Value)"
+                      Layout="RadioGroupLayout.Vertical"
+                      Enabled="!ReadOnly"
+                      Value="Status"
+                      ValueChanged="@((SurveyStatus value) => OnStatusChanged(value))" />
+        <ul class="status-help">
+            <li><strong>Szkic</strong> — niewidoczny publicznie. Formularz i katalog go nie pokazują.</li>
+            <li><strong>Aktywna</strong> — przyjmuje odpowiedzi pod adresem publicznym.</li>
+            <li><strong>Zamknięta</strong> — widoczna, ale nie przyjmuje nowych odpowiedzi.</li>
+        </ul>
+    </div>
+
+    @if (SlugEditable)
+    {
+        <div class="field">
+            <label class="field-label" for="survey-slug">Własny adres (opcjonalnie)</label>
+            <DxTextBox InputId="survey-slug"
+                       Text="@Slug"
+                       TextChanged="@((string? value) => OnSlugChanged(value))"
+                       BindValueMode="BindValueMode.OnInput"
+                       NullText="zostaw puste, aby utworzyć z tytułu" />
+            <p class="slug-preview">Adres: /ankieta/@PreviewSlug</p>
+        </div>
+    }
+    else
+    {
+        <div class="field">
+            <p class="slug-preview">Adres: <a href="@($"/ankieta/{Slug}")">/ankieta/@Slug</a></p>
+            <DxCheckBox T="bool"
+                        Checked="IsDefault"
+                        CheckedChanged="@((bool value) => OnDefaultChanged(value))"
+                        ValueChecked="true"
+                        ValueUnchecked="false"
+                        AllowIndeterminateState="false"
+                        Enabled="!ReadOnly"
+                        LabelPosition="LabelPosition.Right">
+                Ankieta domyślna (`/` prowadzi tutaj)
+            </DxCheckBox>
+            @if (IsDefault && Status != SurveyStatus.Active)
+            {
+                <p class="editor-warning">Ta ankieta nie jest aktywna — `/` przekieruje do innej aktywnej ankiety.</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public EventCallback<string> TitleChanged { get; set; }
+
+    [Parameter] public string Description { get; set; } = "";
+
+    [Parameter] public EventCallback<string> DescriptionChanged { get; set; }
+
+    [Parameter] public SurveyStatus Status { get; set; } = SurveyStatus.Draft;
+
+    [Parameter] public EventCallback<SurveyStatus> StatusChanged { get; set; }
+
+    [Parameter] public bool SlugEditable { get; set; }
+
+    [Parameter] public string Slug { get; set; } = "";
+
+    [Parameter] public EventCallback<string> SlugChanged { get; set; }
+
+    [Parameter] public bool IsDefault { get; set; }
+
+    [Parameter] public EventCallback<bool> IsDefaultChanged { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private string PreviewSlug =>
+        string.IsNullOrWhiteSpace(Slug) ? SlugGenerator.FromTitle(Title ?? string.Empty) : Slug.Trim();
+
+    private static readonly IReadOnlyList<StatusOption> Statuses =
+    [
+        new(SurveyStatus.Draft, "Szkic"),
+        new(SurveyStatus.Active, "Aktywna"),
+        new(SurveyStatus.Closed, "Zamknięta")
+    ];
+
+    private Task OnTitleChanged(string? value) => TitleChanged.InvokeAsync(value ?? string.Empty);
+
+    private Task OnDescriptionChanged(string? value) => DescriptionChanged.InvokeAsync(value ?? string.Empty);
+
+    private Task OnStatusChanged(SurveyStatus value) => StatusChanged.InvokeAsync(value);
+
+    private Task OnSlugChanged(string? value) => SlugChanged.InvokeAsync(value ?? string.Empty);
+
+    private Task OnDefaultChanged(bool value) => IsDefaultChanged.InvokeAsync(value);
+
+    private sealed record StatusOption(SurveyStatus Value, string Label);
+}

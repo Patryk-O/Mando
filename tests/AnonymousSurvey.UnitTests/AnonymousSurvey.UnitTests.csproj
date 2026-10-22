@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AnonymousSurvey.Application\AnonymousSurvey.Application.csproj" />
+    <ProjectReference Include="..\..\src\AnonymousSurvey.Web\AnonymousSurvey.Web.csproj" />
   </ItemGroup>
 
 </Project>

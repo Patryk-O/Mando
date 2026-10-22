@@ -1,0 +1,24 @@
+@inject IJSRuntime JS
+
+<NavigationLock ConfirmExternalNavigation="Enabled"
+                OnBeforeInternalNavigation="OnBeforeInternalNavigation" />
+
+@code {
+    public const string LeaveMessage = "Masz niezapisane zmiany. Opuścić stronę?";
+
+    [Parameter] public bool Enabled { get; set; }
+
+    private async Task OnBeforeInternalNavigation(LocationChangingContext context)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        var leave = await JS.InvokeAsync<bool>("confirm", LeaveMessage);
+        if (!leave)
+        {
+            context.PreventNavigation();
+        }
+    }
+}
