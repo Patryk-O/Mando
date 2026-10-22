@@ -26,15 +26,28 @@
                 @foreach (var item in _results.ScaleAggregates)
                 {
                     <article class="aggregate">
-                        <h3>@item.Text</h3>
-                        <p class="aggregate__value">Średnia: <strong>@item.Average.ToString("0.00")</strong> / 5</p>
-                        @foreach (var step in item.Distribution.OrderByDescending(d => d.Key))
+                        <h3>
+                            <span class="aggregate__title">@item.Text</span>
+                            @if (!item.IsCurrentlyAssigned)
+                            {
+                                <span class="badge badge--removed">usunięte z ankiety</span>
+                            }
+                        </h3>
+                        <p class="aggregate__count">@ResponseLine(item.AnsweredCount, item.EligibleCount, item.IsCurrentlyAssigned)</p>
+                        @if (item.AnsweredCount > 0)
                         {
-                            <div class="bar-row">
-                                <span class="bar-row__label">@step.Key</span>
-                                <div class="bar"><div class="bar__fill" style="width:@Percent(step.Value, item.Distribution.Values.Sum())%"></div></div>
-                                <span class="bar-row__count">@step.Value</span>
-                            </div>
+                            <p class="aggregate__value">Średnia: <strong>@item.Average.ToString("0.00")</strong> / 5</p>
+                        }
+                        @if (ShowBreakdown(item.IsCurrentlyAssigned, item.EligibleCount, item.AnsweredCount))
+                        {
+                            @foreach (var step in item.Distribution.OrderByDescending(d => d.Key))
+                            {
+                                <div class="bar-row">
+                                    <span class="bar-row__label">@step.Key</span>
+                                    <div class="bar"><div class="bar__fill" style="width:@Percent(step.Value, item.Distribution.Values.Sum())%"></div></div>
+                                    <span class="bar-row__count">@step.Value</span>
+                                </div>
+                            }
                         }
                     </article>
                 }
@@ -43,25 +56,41 @@
                 {
                     var total = item.YesCount + item.NoCount;
                     <article class="aggregate">
-                        <h3>@item.Text</h3>
-                        <div class="bar-row">
-                            <span class="bar-row__label">Tak</span>
-                            <div class="bar"><div class="bar__fill" style="width:@Percent(item.YesCount, total)%"></div></div>
-                            <span class="bar-row__count">@item.YesCount</span>
-                        </div>
-                        <div class="bar-row">
-                            <span class="bar-row__label">Nie</span>
-                            <div class="bar"><div class="bar__fill bar__fill--alt" style="width:@Percent(item.NoCount, total)%"></div></div>
-                            <span class="bar-row__count">@item.NoCount</span>
-                        </div>
+                        <h3>
+                            <span class="aggregate__title">@item.Text</span>
+                            @if (!item.IsCurrentlyAssigned)
+                            {
+                                <span class="badge badge--removed">usunięte z ankiety</span>
+                            }
+                        </h3>
+                        <p class="aggregate__count">@ResponseLine(item.AnsweredCount, item.EligibleCount, item.IsCurrentlyAssigned)</p>
+                        @if (ShowBreakdown(item.IsCurrentlyAssigned, item.EligibleCount, item.AnsweredCount))
+                        {
+                            <div class="bar-row">
+                                <span class="bar-row__label">Tak</span>
+                                <div class="bar"><div class="bar__fill" style="width:@Percent(item.YesCount, total)%"></div></div>
+                                <span class="bar-row__count">@item.YesCount</span>
+                            </div>
+                            <div class="bar-row">
+                                <span class="bar-row__label">Nie</span>
+                                <div class="bar"><div class="bar__fill bar__fill--alt" style="width:@Percent(item.NoCount, total)%"></div></div>
+                                <span class="bar-row__count">@item.NoCount</span>
+                            </div>
+                        }
                     </article>
                 }
 
                 @foreach (var item in _results.OpenAggregates)
                 {
                     <article class="aggregate">
-                        <h3>@item.Text</h3>
-                        <p class="aggregate__value">Odpowiedzi tekstowych: <strong>@item.ResponseCount</strong></p>
+                        <h3>
+                            <span class="aggregate__title">@item.Text</span>
+                            @if (!item.IsCurrentlyAssigned)
+                            {
+                                <span class="badge badge--removed">usunięte z ankiety</span>
+                            }
+                        </h3>
+                        <p class="aggregate__count">@ResponseLine(item.AnsweredCount, item.EligibleCount, item.IsCurrentlyAssigned)</p>
                     </article>
                 }
             </div>
@@ -99,15 +128,33 @@
         _rows = _results is null ? [] : BuildRows(_results);
     }
 
+    private static string ResponseLine(int answered, int eligible, bool assigned)
+    {
+        if (!assigned)
+        {
+            return $"{answered} odpowiedzi";
+        }
+
+        if (eligible == 0)
+        {
+            return "Brak odpowiedzi";
+        }
+
+        return $"Odpowiedziało {answered} z {eligible}";
+    }
+
+    private static bool ShowBreakdown(bool assigned, int eligible, int answered) =>
+        assigned ? eligible > 0 : answered > 0;
+
     private static double Percent(int value, int total) =>
         total == 0 ? 0 : Math.Round(value * 100.0 / total, 1, MidpointRounding.AwayFromZero);
 
     private static List<ResultRow> BuildRows(SurveyResultsDto results)
     {
         var questions = new Dictionary<int, (string Text, QuestionType Type)>();
-        foreach (var s in results.ScaleAggregates) questions[s.QuestionId] = (s.Text, QuestionType.Scale);
-        foreach (var y in results.YesNoAggregates) questions[y.QuestionId] = (y.Text, QuestionType.YesNo);
-        foreach (var o in results.OpenAggregates) questions[o.QuestionId] = (o.Text, QuestionType.Open);
+        foreach (var scale in results.ScaleAggregates) questions[scale.QuestionId] = (scale.Text, QuestionType.Scale);
+        foreach (var yesNo in results.YesNoAggregates) questions[yesNo.QuestionId] = (yesNo.Text, QuestionType.YesNo);
+        foreach (var open in results.OpenAggregates) questions[open.QuestionId] = (open.Text, QuestionType.Open);
 
         var rows = new List<ResultRow>();
         foreach (var response in results.RawResponses)
@@ -115,7 +162,7 @@
             var submittedAt = DateTime.SpecifyKind(response.SubmittedAtUtc, DateTimeKind.Utc).ToLocalTime();
             foreach (var answer in response.Answers.OrderBy(a => a.QuestionId))
             {
-                if (!questions.TryGetValue(answer.QuestionId, out var question))
+                if (answer.IsEmpty || !questions.TryGetValue(answer.QuestionId, out var question))
                 {
                     continue;
                 }

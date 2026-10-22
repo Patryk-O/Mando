@@ -11,4 +11,8 @@ public class SurveyQuestion
     public Question Question { get; set; } = null!;
 
     public int SortOrder { get; set; }
+
+    public bool IsRequired { get; set; } = true;
+
+    public DateTime AddedAtUtc { get; set; }
 }

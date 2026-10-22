@@ -1,0 +1,77 @@
+@using AnonymousSurvey.Application.Common
+
+<div class="new-question">
+    <h3 class="section-title">Nowe pytanie</h3>
+    <label class="field-label" for="new-question-text">Treść nowego pytania</label>
+    <DxMemo InputId="new-question-text"
+            Text="@_text"
+            TextChanged="@((string? value) => _text = value ?? string.Empty)"
+            BindValueMode="BindValueMode.OnInput"
+            Rows="3"
+            NullText="Wpisz treść pytania…" />
+    <div class="char-counter">@_text.Length / @SurveyLimits.MaxQuestionTextLength</div>
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <p class="editor-error" role="alert">@_error</p>
+    }
+
+    <p class="field-label">Typ</p>
+    <DxRadioGroup Items="Types"
+                  TextFieldName="@nameof(TypeOption.Label)"
+                  ValueFieldName="@nameof(TypeOption.Value)"
+                  Layout="RadioGroupLayout.Vertical"
+                  Value="_type"
+                  ValueChanged="@((QuestionType value) => _type = value)" />
+
+    <div class="editor-check">
+        <DxCheckBox T="bool"
+                    Checked="_required"
+                    CheckedChanged="@((bool value) => _required = value)"
+                    ValueChecked="true"
+                    ValueUnchecked="false"
+                    AllowIndeterminateState="false"
+                    LabelPosition="LabelPosition.Right">
+            Wymagane
+        </DxCheckBox>
+    </div>
+
+    <DxButton Text="Dodaj pytanie"
+              RenderStyle="ButtonRenderStyle.Primary"
+              SubmitFormOnClick="false"
+              Enabled="Model.CanAddMore"
+              Click="AddAsync" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SurveyItemsEditorModel Model { get; set; } = null!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _text = "";
+    private QuestionType _type = QuestionType.Scale;
+    private bool _required = true;
+    private string? _error;
+
+    private static readonly IReadOnlyList<TypeOption> Types =
+    [
+        new(QuestionType.Scale, "Skala 1–5"),
+        new(QuestionType.YesNo, "Tak/Nie"),
+        new(QuestionType.Open, "Otwarte")
+    ];
+
+    private async Task AddAsync()
+    {
+        var result = Model.AddNew(_text, _type, _required);
+        if (!result.IsValid)
+        {
+            _error = string.Join(" ", result.Errors);
+            return;
+        }
+
+        _text = "";
+        _error = null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private sealed record TypeOption(QuestionType Value, string Label);
+}

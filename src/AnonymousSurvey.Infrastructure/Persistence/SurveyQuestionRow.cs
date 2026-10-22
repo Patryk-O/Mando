@@ -16,4 +16,6 @@ public sealed class SurveyQuestionRow
     public QuestionType Type { get; set; }
 
     public int SortOrder { get; set; }
+
+    public bool IsRequired { get; set; }
 }

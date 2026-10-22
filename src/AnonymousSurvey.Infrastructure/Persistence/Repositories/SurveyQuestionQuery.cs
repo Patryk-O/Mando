@@ -15,7 +15,7 @@ public sealed class SurveyQuestionQuery(SurveyDbContext dbContext) : ISurveyQues
     {
         return await dbContext.GetSurveyQuestions(surveyId)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new SurveyQuestionDto(x.QuestionId, x.Text, x.Type, x.SortOrder))
+            .Select(x => new SurveyQuestionDto(x.QuestionId, x.Text, x.Type, x.SortOrder, x.IsRequired))
             .ToListAsync(cancellationToken);
     }
 
@@ -26,7 +26,7 @@ public sealed class SurveyQuestionQuery(SurveyDbContext dbContext) : ISurveyQues
     {
         return await dbContext.GetSurveyQuestions(surveyId)
             .Where(x => x.QuestionId == questionId)
-            .Select(x => new SurveyQuestionDto(x.QuestionId, x.Text, x.Type, x.SortOrder))
+            .Select(x => new SurveyQuestionDto(x.QuestionId, x.Text, x.Type, x.SortOrder, x.IsRequired))
             .FirstOrDefaultAsync(cancellationToken);
     }
 }

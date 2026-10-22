@@ -8,7 +8,8 @@ RETURN
         q.Id AS QuestionId,
         q.[Text],
         q.[Type],
-        sq.SortOrder
+        sq.SortOrder,
+        sq.IsRequired
     FROM dbo.SurveyQuestion AS sq
     INNER JOIN dbo.Question AS q ON q.Id = sq.QuestionId
     WHERE sq.SurveyId = @SurveyId

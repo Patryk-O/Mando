@@ -2,10 +2,20 @@
     <legend class="question-card__legend">
         <span class="question-card__number">@Number</span>
         <span class="question-card__text">@Text</span>
+        @if (IsRequired)
+        {
+            <span class="question-card__required" aria-label="wymagane">*</span>
+        }
     </legend>
 
     <div class="question-card__body">
         @ChildContent
+        @if (ShowClear)
+        {
+            <div class="question-card__toolbar">
+                <button type="button" class="link-button" @onclick="OnClear">Wyczyść</button>
+            </div>
+        }
     </div>
 
     @if (!string.IsNullOrEmpty(Error))
@@ -20,6 +30,12 @@
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
 
     [Parameter] public string? Error { get; set; }
+
+    [Parameter] public bool IsRequired { get; set; }
+
+    [Parameter] public bool ShowClear { get; set; }
+
+    [Parameter] public EventCallback OnClear { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

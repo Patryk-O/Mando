@@ -4,4 +4,7 @@ public sealed record ScaleQuestionAggregateDto(
     int QuestionId,
     string Text,
     double Average,
-    IReadOnlyDictionary<int, int> Distribution);
+    IReadOnlyDictionary<int, int> Distribution,
+    int AnsweredCount,
+    int EligibleCount,
+    bool IsCurrentlyAssigned);

@@ -34,7 +34,14 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : DbCont
         {
             entity.ToTable("Survey");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Slug).HasMaxLength(60).IsRequired();
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            entity.Property(x => x.UpdatedAtUtc).HasColumnType("datetime2(0)");
+            entity.Property(x => x.RowVersion).IsRowVersion();
+            entity.HasIndex(x => x.Slug).IsUnique();
             entity.Property(x => x.ResultsAccessToken).HasMaxLength(64).IsRequired();
             entity.Property(x => x.ConfigAccessToken).HasMaxLength(64).IsRequired();
             entity.HasIndex(x => x.ResultsAccessToken).IsUnique();
@@ -47,12 +54,14 @@ public class SurveyDbContext(DbContextOptions<SurveyDbContext> options) : DbCont
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Text).HasMaxLength(500).IsRequired();
             entity.Property(x => x.Type).HasConversion<int>();
+            entity.HasIndex(x => new { x.Type, x.Text }).IsUnique().HasDatabaseName("UX_Question_Type_Text");
         });
 
         modelBuilder.Entity<SurveyQuestion>(entity =>
         {
             entity.ToTable("SurveyQuestion");
             entity.HasKey(x => new { x.SurveyId, x.QuestionId });
+            entity.Property(x => x.AddedAtUtc).HasColumnType("datetime2(0)");
             entity.HasOne(x => x.Survey).WithMany(x => x.SurveyQuestions).HasForeignKey(x => x.SurveyId);
             entity.HasOne(x => x.Question).WithMany(x => x.SurveyQuestions).HasForeignKey(x => x.QuestionId);
         });

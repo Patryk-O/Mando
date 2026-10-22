@@ -1,6 +1,8 @@
 using System.Text.Json;
 using AnonymousSurvey.Application.Abstractions;
+using AnonymousSurvey.Application.Common;
 using AnonymousSurvey.Application.Dtos;
+using AnonymousSurvey.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnonymousSurvey.Infrastructure.Persistence.Repositories;
@@ -28,10 +30,25 @@ public sealed class SurveyResponseSaver(SurveyDbContext dbContext) : ISurveyResp
             }),
             JsonOptions);
 
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"EXEC dbo.usp_SaveSurveyResponse @SurveyId = {submission.SurveyId}, @SessionId = {sessionId}, @AnswersJson = {answersJson}",
-            cancellationToken);
+        try
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"EXEC dbo.usp_SaveSurveyResponse @SurveyId = {submission.SurveyId}, @SessionId = {sessionId}, @AnswersJson = {answersJson}",
+                cancellationToken);
+        }
+        catch (Exception ex) when (MapConflict(ex) is SubmissionConflict conflict)
+        {
+            throw new SurveyChangedException(conflict);
+        }
 
         return new SubmitSurveyResponseResultDto(sessionId);
     }
+
+    private static SubmissionConflict? MapConflict(Exception exception) =>
+        SurveyWriteSupport.SqlNumber(exception) switch
+        {
+            50001 => SubmissionConflict.SurveyClosed,
+            50003 or 50004 => SubmissionConflict.FormChanged,
+            _ => null
+        };
 }

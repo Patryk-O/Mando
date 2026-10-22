@@ -1,0 +1,38 @@
+@inject IJSRuntime JS
+
+<div class="access-link" role="group" aria-label="@Label">
+    <span class="access-link__label">@Label</span>
+    <a class="access-link__url" href="@Url">@Url</a>
+    <DxButton Text="@(_copied ? "Skopiowano" : "Kopiuj")"
+              RenderStyle="ButtonRenderStyle.Secondary"
+              SubmitFormOnClick="false"
+              Click="CopyAsync" />
+</div>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p class="editor-error" role="alert">@_error</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Url { get; set; } = "";
+
+    private bool _copied;
+    private string? _error;
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Url);
+            _copied = true;
+            _error = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _copied = false;
+            _error = "Nie udało się skopiować linku.";
+        }
+    }
+}

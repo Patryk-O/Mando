@@ -6,4 +6,5 @@ public sealed record SurveyQuestionDto(
     int QuestionId,
     string Text,
     QuestionType Type,
-    int SortOrder);
+    int SortOrder,
+    bool IsRequired = true);
