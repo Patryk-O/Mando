@@ -1,3 +1,4 @@
+using AnonymousSurvey.Application.Common;
 using AnonymousSurvey.Application.Dtos;
 
 namespace AnonymousSurvey.Application.Abstractions;
@@ -8,7 +9,7 @@ public interface ISurveyConfigService
         string configAccessToken,
         CancellationToken cancellationToken = default);
 
-    Task<bool> UpdateAssignmentsAsync(
+    Task<ValidationResult> UpdateAssignmentsAsync(
         string configAccessToken,
         UpdateSurveyConfigDto update,
         CancellationToken cancellationToken = default);

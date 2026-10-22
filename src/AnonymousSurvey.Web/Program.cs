@@ -1,5 +1,6 @@
 using AnonymousSurvey.Application;
 using AnonymousSurvey.Infrastructure;
+using AnonymousSurvey.Infrastructure.Persistence;
 using AnonymousSurvey.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,12 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+
+if (app.Configuration.GetValue("Database:InitializeOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
