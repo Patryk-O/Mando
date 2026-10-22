@@ -27,7 +27,8 @@ public static class DependencyInjection
         services.AddScoped<DatabaseInitializer>();
         services.AddScoped<ISurveyQuestionQuery, SurveyQuestionQuery>();
         services.AddScoped<ISurveyResponseSaver, SurveyResponseSaver>();
-        services.AddScoped<IActiveSurveyQuery, ActiveSurveyQuery>();
+        services.AddScoped<ISurveyCatalogQuery, SurveyCatalogQuery>();
+        services.AddScoped<ISurveyAuthoringService, SurveyAuthoringService>();
         services.AddScoped<ISurveyResultsQuery, SurveyResultsQuery>();
         services.AddScoped<ISurveyConfigService, SurveyConfigService>();
 

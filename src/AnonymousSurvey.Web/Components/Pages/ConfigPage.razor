@@ -112,7 +112,7 @@
     private void Remove(int index) => _assigned.RemoveAt(index);
 
     private void Add(QuestionPoolItemDto item) =>
-        _assigned.Add(new SurveyConfigQuestionDto(item.QuestionId, item.Text, item.Type, _assigned.Count + 1));
+        _assigned.Add(new SurveyConfigQuestionDto(item.QuestionId, item.Text, item.Type, _assigned.Count + 1, true, 0));
 
     private async Task SaveAsync()
     {
@@ -127,13 +127,19 @@
         {
             var update = new UpdateSurveyConfigDto(
                 _config.SurveyId,
-                _assigned.Select((q, i) => new SurveyConfigAssignmentDto(q.QuestionId, i + 1)).ToList());
+                _config.Title,
+                _config.Description,
+                _config.Status,
+                _config.IsDefault,
+                _config.RowVersion,
+                _assigned.Select(q => new SurveyItemInputDto(q.QuestionId, null, q.IsRequired)).ToList());
 
-            var result = await ConfigService.UpdateAssignmentsAsync(Token, update, PageCancellation);
-            _messageIsError = !result.IsValid;
-            _message = result.IsValid ? "Konfiguracja została zapisana." : string.Join(" ", result.Errors);
+            var outcome = await ConfigService.UpdateAsync(Token, update, PageCancellation);
+            var result = outcome.Validation;
+            _messageIsError = !outcome.Succeeded;
+            _message = outcome.Succeeded ? "Konfiguracja została zapisana." : string.Join(" ", result.Errors);
 
-            if (result.IsValid)
+            if (outcome.Succeeded)
             {
                 _assigned = _assigned.Select((q, i) => q with { SortOrder = i + 1 }).ToList();
             }

@@ -6,4 +6,6 @@ public sealed record SurveyConfigQuestionDto(
     int QuestionId,
     string Text,
     QuestionType Type,
-    int SortOrder);
+    int SortOrder,
+    bool IsRequired,
+    int AnswerCount);

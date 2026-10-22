@@ -48,6 +48,7 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
             .Union(answers.Select(a => a.QuestionId))
             .ToHashSet();
 
+        var assignedIds = assigned.Select(a => a.QuestionId).ToHashSet();
         var sortOrders = assigned.ToDictionary(a => a.QuestionId, a => a.SortOrder);
 
         var questions = (await dbContext.Questions
@@ -76,7 +77,10 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
                         question.Id,
                         question.Text,
                         values.Count == 0 ? 0 : Math.Round(values.Average(), 2),
-                        distribution));
+                        distribution,
+                        values.Count,
+                        sessions.Count,
+                        assignedIds.Contains(question.Id)));
                     break;
 
                 case QuestionType.YesNo:
@@ -84,14 +88,20 @@ public sealed class SurveyResultsQuery(SurveyDbContext dbContext) : ISurveyResul
                         question.Id,
                         question.Text,
                         questionAnswers.Count(a => a.BoolValue == true),
-                        questionAnswers.Count(a => a.BoolValue == false)));
+                        questionAnswers.Count(a => a.BoolValue == false),
+                        questionAnswers.Count(a => a.BoolValue.HasValue),
+                        sessions.Count,
+                        assignedIds.Contains(question.Id)));
                     break;
 
                 case QuestionType.Open:
                     open.Add(new OpenQuestionAggregateDto(
                         question.Id,
                         question.Text,
-                        questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue))));
+                        questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue)),
+                        questionAnswers.Count(a => !string.IsNullOrWhiteSpace(a.TextValue)),
+                        sessions.Count,
+                        assignedIds.Contains(question.Id)));
                     break;
             }
         }

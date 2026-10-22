@@ -9,7 +9,7 @@ public interface ISurveyConfigService
         string configAccessToken,
         CancellationToken cancellationToken = default);
 
-    Task<ValidationResult> UpdateAssignmentsAsync(
+    Task<UpdateSurveyConfigOutcome> UpdateAsync(
         string configAccessToken,
         UpdateSurveyConfigDto update,
         CancellationToken cancellationToken = default);

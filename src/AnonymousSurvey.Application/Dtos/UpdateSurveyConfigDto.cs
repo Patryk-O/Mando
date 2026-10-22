@@ -1,7 +1,12 @@
-namespace AnonymousSurvey.Application.Dtos;
+using AnonymousSurvey.Domain.Enums;
 
-public sealed record SurveyConfigAssignmentDto(int QuestionId, int SortOrder);
+namespace AnonymousSurvey.Application.Dtos;
 
 public sealed record UpdateSurveyConfigDto(
     int SurveyId,
-    IReadOnlyList<SurveyConfigAssignmentDto> Assignments);
+    string Title,
+    string? Description,
+    SurveyStatus Status,
+    bool IsDefault,
+    byte[] RowVersion,
+    IReadOnlyList<SurveyItemInputDto> Items);

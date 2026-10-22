@@ -1,6 +1,6 @@
 @page "/"
 @inherits BasePage
-@inject IActiveSurveyQuery ActiveSurveyQuery
+@inject ISurveyCatalogQuery Catalog
 @inject ISurveyQuestionQuery QuestionQuery
 @inject ISurveyResponseValidator Validator
 @inject ISurveySubmissionService SubmissionService
@@ -57,7 +57,7 @@
 </PageShell>
 
 @code {
-    private ActiveSurveyDto? _survey;
+    private SurveyPublicDto? _survey;
     private IReadOnlyList<SurveyQuestionDto> _questions = [];
     private readonly Dictionary<int, AnswerFormModel> _models = [];
     private readonly Dictionary<int, string> _errors = [];
@@ -72,7 +72,8 @@
         _errors.Clear();
         _summaryErrors.Clear();
 
-        _survey = await ActiveSurveyQuery.GetActiveAsync(cancellationToken);
+        var slug = await Catalog.GetDefaultSlugAsync(cancellationToken);
+        _survey = slug is null ? null : await Catalog.GetBySlugAsync(slug, cancellationToken);
         if (_survey is null)
         {
             _questions = [];
