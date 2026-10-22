@@ -1,0 +1,40 @@
+@page "/"
+@inherits BasePage
+@inject ISurveyCatalogQuery Catalog
+
+<PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
+    @if (_slug is null)
+    {
+        <div class="state-box">
+            <p>Brak aktywnych ankiet.</p>
+            <div class="empty-actions">
+                <a class="link-button" href="/nowa-ankieta">Utwórz ankietę</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="state-box state-box--loading" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Ładowanie…</span>
+        </div>
+    }
+</PageShell>
+
+@code {
+    private string? _slug;
+    private bool _loaded;
+
+    protected override string PageTitle => !_loaded || _slug is not null ? "Ankieta" : "Brak aktywnych ankiet";
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _loaded = false;
+        _slug = await Catalog.GetDefaultSlugAsync(cancellationToken);
+        _loaded = true;
+        if (_slug is not null)
+        {
+            Navigation.NavigateTo($"/ankieta/{_slug}", replace: true);
+        }
+    }
+}

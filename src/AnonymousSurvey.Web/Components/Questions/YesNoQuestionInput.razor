@@ -1,6 +1,11 @@
 @inherits QuestionInputBase
 
-<QuestionCard Number="Number" Text="@Question.Text" Error="@Error">
+<QuestionCard Number="Number"
+              Text="@Question.Text"
+              Error="@Error"
+              IsRequired="Question.IsRequired"
+              ShowClear="!Question.IsRequired"
+              OnClear="ClearAnswerAsync">
     <DxRadioGroup Items="Choices"
                   TextFieldName="@nameof(YesNoChoice.Label)"
                   ValueFieldName="@nameof(YesNoChoice.Value)"

@@ -1,26 +1,44 @@
-@page "/"
+@page "/ankieta/{Slug}"
 @inherits BasePage
+@using AnonymousSurvey.Application.Common
+@using AnonymousSurvey.Application.Services
 @inject ISurveyCatalogQuery Catalog
 @inject ISurveyQuestionQuery QuestionQuery
 @inject ISurveyResponseValidator Validator
 @inject ISurveySubmissionService SubmissionService
 
 <PageShell Title="@PageTitle" IsLoading="IsLoading" Error="@LoadError" OnRetry="ReloadAsync" IsNotFound="IsNotFound">
-    @if (_survey is null)
+    @if (_survey is not null && (_survey.Status == SurveyStatus.Closed || _replacedByClosure))
     {
         <div class="state-box">
-            <p>Brak aktywnej ankiety. Zajrzyj tu ponownie później.</p>
+            <p>@(_closureMessage ?? "Ta ankieta jest zamknięta i nie przyjmuje już odpowiedzi.")</p>
         </div>
     }
-    else if (_questions.Count == 0)
+    else if (_survey is not null && _questions.Count == 0)
     {
+        @if (_summaryErrors.Count > 0)
+        {
+            <div class="state-box state-box--error" role="alert">
+                <ul>
+                    @foreach (var message in _summaryErrors)
+                    {
+                        <li>@message</li>
+                    }
+                </ul>
+            </div>
+        }
         <div class="state-box">
             <p>Ankieta nie zawiera jeszcze pytań.</p>
         </div>
     }
-    else
+    else if (_survey is not null)
     {
-        <p class="lead">Wypełnienie zajmie około minuty. Wszystkie pytania są wymagane.</p>
+        @if (!string.IsNullOrWhiteSpace(_survey.Description))
+        {
+            <p class="survey-description">@_survey.Description</p>
+        }
+
+        <p class="lead">Pola oznaczone * są wymagane.</p>
 
         @if (_summaryErrors.Count > 0)
         {
@@ -57,12 +75,16 @@
 </PageShell>
 
 @code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
     private SurveyPublicDto? _survey;
     private IReadOnlyList<SurveyQuestionDto> _questions = [];
     private readonly Dictionary<int, AnswerFormModel> _models = [];
     private readonly Dictionary<int, string> _errors = [];
     private readonly List<string> _summaryErrors = [];
     private bool _submitting;
+    private bool _replacedByClosure;
+    private string? _closureMessage;
 
     protected override string PageTitle => _survey?.Title ?? "Ankieta";
 
@@ -71,20 +93,19 @@
         _models.Clear();
         _errors.Clear();
         _summaryErrors.Clear();
+        _submitting = false;
+        _replacedByClosure = false;
+        _closureMessage = null;
 
-        var slug = await Catalog.GetDefaultSlugAsync(cancellationToken);
-        _survey = slug is null ? null : await Catalog.GetBySlugAsync(slug, cancellationToken);
-        if (_survey is null)
+        _survey = await Catalog.GetBySlugAsync(Slug, cancellationToken);
+        IsNotFound = _survey is null;
+        if (_survey is null || _survey.Status != SurveyStatus.Active)
         {
             _questions = [];
             return;
         }
 
-        _questions = await QuestionQuery.GetQuestionsAsync(_survey.SurveyId, cancellationToken);
-        foreach (var question in _questions)
-        {
-            _models[question.QuestionId] = new AnswerFormModel(question.QuestionId);
-        }
+        ApplyQuestions(await QuestionQuery.GetQuestionsAsync(_survey.SurveyId, cancellationToken));
     }
 
     private string? GetError(int questionId) => _errors.GetValueOrDefault(questionId);
@@ -109,40 +130,68 @@
 
     private async Task SubmitAsync()
     {
-        if (_survey is null || _submitting)
+        // Guard w kodzie: drugi klik w tym samym obiegu nie zapisuje drugiej odpowiedzi.
+        if (_submitting || _survey is null || _replacedByClosure || _survey.Status != SurveyStatus.Active)
         {
-            return;
-        }
-
-        _errors.Clear();
-        _summaryErrors.Clear();
-
-        foreach (var question in _questions)
-        {
-            var result = Validator.Validate(_models[question.QuestionId].ToDto(), question);
-            if (!result.IsValid)
-            {
-                _errors[question.QuestionId] = result.Errors[0];
-            }
-        }
-
-        if (_errors.Count > 0)
-        {
-            _summaryErrors.Add($"Uzupełnij wymagane odpowiedzi ({_errors.Count}).");
             return;
         }
 
         _submitting = true;
+        var navigated = false;
         try
         {
-            var answers = _questions.Select(q => _models[q.QuestionId].ToDto()).ToList();
+            _errors.Clear();
+            _summaryErrors.Clear();
+
+            var answers = _questions.Select(question => _models[question.QuestionId].ToDto()).ToList();
+            foreach (var question in _questions)
+            {
+                var single = Validator.Validate(_models[question.QuestionId].ToDto(), question);
+                if (!single.IsValid)
+                {
+                    _errors[question.QuestionId] = single.Errors[0];
+                }
+            }
+
+            var clientValidation = Validator.Validate(answers, _questions);
+            if (!clientValidation.IsValid)
+            {
+                _summaryErrors.AddRange(clientValidation.Errors);
+                return;
+            }
+
             var outcome = await SubmissionService.SubmitAsync(
                 new SubmitSurveyResponseDto(_survey.SurveyId, answers),
                 PageCancellation);
 
             if (outcome.Succeeded)
             {
-                Navigation.NavigateTo("/dziekujemy");
+                navigated = true;
+                Navigation.NavigateTo($"/ankieta/{_survey.Slug}/dziekujemy");
+                return;
+            }
+
+            if (outcome.Conflict == SubmissionConflict.SurveyClosed)
+            {
+                _replacedByClosure = true;
+                _closureMessage = outcome.Validation.Errors.FirstOrDefault()
+                    ?? "Ta ankieta została zamknięta i nie przyjmuje już odpowiedzi.";
+                return;
+            }
+
+            var fresh = await QuestionQuery.GetQuestionsAsync(_survey.SurveyId, PageCancellation);
+            if (outcome.Conflict == SubmissionConflict.FormChanged || AnswerFormModel.ShapeChanged(_questions, fresh))
+            {
+                if (outcome.Conflict == SubmissionConflict.FormChanged)
+                {
+                    _summaryErrors.AddRange(outcome.Validation.Errors);
+                }
+                else
+                {
+                    _summaryErrors.Add(SurveySubmissionService.FormChangedMessage);
+                }
+
+                ApplyQuestions(fresh);
                 return;
             }
 
@@ -155,7 +204,23 @@
         }
         finally
         {
-            _submitting = false;
+            if (!navigated)
+            {
+                _submitting = false;
+            }
         }
+    }
+
+    private void ApplyQuestions(IReadOnlyList<SurveyQuestionDto> questions)
+    {
+        var carried = AnswerFormModel.CarryOver(_models, questions);
+        _questions = questions;
+        _models.Clear();
+        foreach (var (questionId, model) in carried)
+        {
+            _models[questionId] = model;
+        }
+
+        _errors.Clear();
     }
 }
