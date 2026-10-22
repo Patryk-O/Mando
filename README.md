@@ -78,9 +78,22 @@ Skrypty można też uruchomić ręcznie w SSMS/`sqlcmd` w kolejności numerów. 
 
 ## DevExpress (Demo / trial)
 
-Pakiet `DevExpress.Blazor` 26.1.5 pochodzi z nuget.org i jest zarejestrowany w `Program.cs` (`AddDevExpressBlazor`). Używane komponenty: `DxButton`, `DxRadioGroup`, `DxMemo`, `DxGrid`, motyw `office-white.bs5`.
+Pakiet `DevExpress.Blazor` 26.1.5 pochodzi z nuget.org. Rejestracja jest zgodna z oficjalnym szablonem z paczki `DevExpress.Blazor.ProjectTemplates` (`dotnet new dx.blazor`):
+
+- `Program.cs` — `AddDevExpressBlazor(options => options.SizeMode = SizeMode.Medium)`,
+- `App.razor` — `@DxResourceManager.RegisterTheme(Themes.OfficeWhite)` i `@DxResourceManager.RegisterScripts()` w `<head>`.
+
+Z szablonu **nie** przejmujemy shella demo (Drawer, NavMenu, strony przykładowe, `site.css` z `overflow: hidden`) — ankieta anonimowa nie powinna pokazywać nawigacji do widoków administracyjnych. Referencyjny projekt można wygenerować lokalnie:
+
+```powershell
+dotnet new dx.blazor -n DxTemplate -o _local\dx-template -f net10.0 -int Server -th OfficeWhite -sz Medium
+```
+
+Używane komponenty: `DxButton`, `DxRadioGroup`, `DxMemo`, `DxGrid`.
 
 **Ostrzeżenie DX1000 / DX1001 przy kompilacji jest oczekiwane** („For evaluation purposes only”) — to wersja Demo/trial bez zainstalowanej licencji. W działającej aplikacji pojawia się pomarańczowy baner evaluation u góry strony. Nie blokuje to działania.
+
+Ostrzeżenie `DX1000` pojawia się także w świeżo wygenerowanym projekcie z oficjalnego szablonu `dx.blazor`, więc nie wynika z kodu tej aplikacji, tylko z zakresu zainstalowanej licencji (musi obejmować `DevExpress.Blazor`, np. subskrypcja ASP.NET / Universal / DXperience lub aktywny trial).
 
 Aby użyć własnej licencji (klucza **nie** commitujemy):
 

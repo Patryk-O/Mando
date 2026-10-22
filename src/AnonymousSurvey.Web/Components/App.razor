@@ -7,7 +7,8 @@
     <meta name="robots" content="noindex, nofollow" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["_content/DevExpress.Blazor.Themes/office-white.bs5.min.css"]" />
+    @DxResourceManager.RegisterTheme(Themes.OfficeWhite)
+    @DxResourceManager.RegisterScripts()
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["AnonymousSurvey.Web.styles.css"]" />
     <ImportMap />
