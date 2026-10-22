@@ -1,0 +1,13 @@
+{
+  "name": "anonymous-survey-smoke-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Przeglądarkowe testy smoke (Edge przez playwright-core) dla uruchomionej aplikacji.",
+  "scripts": {
+    "smoke": "node smoke.js",
+    "smoke:config": "node config-smoke.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

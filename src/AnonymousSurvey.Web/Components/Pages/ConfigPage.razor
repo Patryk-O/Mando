@@ -32,7 +32,7 @@
                                 <small class="badge">@TypeLabel(item.Type)</small>
                             </div>
                             <div class="config-item__actions">
-                                <DxButton IconCssClass="" Text="↑" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index > 0" Click="() => Move(index, -1)" aria-label="Przesuń w górę" />
+                                <DxButton Text="↑" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index > 0" Click="() => Move(index, -1)" aria-label="Przesuń w górę" />
                                 <DxButton Text="↓" RenderStyle="ButtonRenderStyle.Secondary" Enabled="index < _assigned.Count - 1" Click="() => Move(index, 1)" aria-label="Przesuń w dół" />
                                 <DxButton Text="Usuń" RenderStyle="ButtonRenderStyle.Danger" Click="() => Remove(index)" />
                             </div>

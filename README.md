@@ -113,6 +113,19 @@ dotnet test
 4. Odśwież `/wyniki/{token}` — licznik +1, agregaty i wiersze w siatce zawierają nową odpowiedź.
 5. Na `/konfiguracja/{token}` usuń pytanie (lub dodaj z puli) i zapisz — formularz `/` pokazuje zmieniony zestaw pytań.
 
+### Smoke test automatyczny (Edge + Playwright)
+
+Wymaga Node.js, zainstalowanej przeglądarki Microsoft Edge i uruchomionej aplikacji (`http://localhost:5202`):
+
+```powershell
+cd tests\smoke-e2e
+npm install
+npm run smoke          # formularz -> walidacja -> zapis (SP) -> /dziekujemy -> wyniki (+1) -> błędne tokeny
+npm run smoke:config   # konfiguracja zmienia zestaw pytań w formularzu, potem przywraca stan
+```
+
+`smoke` zostawia w bazie jedną testową odpowiedź (usuń ją: `DELETE FROM Answer; DELETE FROM ResponseSession;`).
+
 ## Struktura
 
 ```
@@ -123,6 +136,7 @@ AnonymousSurvey.sln
   src/AnonymousSurvey.Web             # Blazor Server + DevExpress
   tests/AnonymousSurvey.UnitTests
   tests/AnonymousSurvey.IntegrationTests
+  tests/smoke-e2e                     # skrypty Playwright (Node), poza solution
   _local/                             # poza gitem — specs i notatki lokalne
 ```
 
