@@ -1,8 +1,8 @@
 using AnonymousSurvey.Application.Abstractions;
+using AnonymousSurvey.Application.Common;
 using AnonymousSurvey.Application.Dtos;
 using AnonymousSurvey.Domain.Enums;
 using AnonymousSurvey.Infrastructure.Persistence;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,8 +10,6 @@ namespace AnonymousSurvey.IntegrationTests;
 
 public class SurveyFlowTests(LocalDbFixture fixture) : IClassFixture<LocalDbFixture>
 {
-    private const string Pending = "SM-C: ISurveyConfigService.UpdateAsync czeka na Zadanie C";
-
     private AsyncServiceScope NewScope() => fixture.Services.CreateAsyncScope();
 
     private static async Task<int> GetDefaultSurveyIdAsync(AsyncServiceScope scope) =>
@@ -113,13 +111,14 @@ public class SurveyFlowTests(LocalDbFixture fixture) : IClassFixture<LocalDbFixt
 
         var incomplete = new SubmitSurveyResponseDto(surveyId, [new AnswerInputDto(1, 3, null, null)]);
 
-        await Assert.ThrowsAsync<SqlException>(() =>
+        var error = await Assert.ThrowsAsync<SurveyChangedException>(() =>
             scope.ServiceProvider.GetRequiredService<ISurveyResponseSaver>().SaveAsync(incomplete));
 
+        Assert.Equal(SubmissionConflict.FormChanged, error.Conflict);
         Assert.Equal(before, await db.ResponseSessions.CountAsync());
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Config_update_changes_question_set_returned_by_tvf()
     {
         await using var scope = NewScope();
@@ -149,7 +148,7 @@ public class SurveyFlowTests(LocalDbFixture fixture) : IClassFixture<LocalDbFixt
         }
     }
 
-    [Fact(Skip = Pending)]
+    [Fact]
     public async Task Config_update_rejects_empty_assignment_and_wrong_token()
     {
         await using var scope = NewScope();
