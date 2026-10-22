@@ -204,7 +204,3 @@ AnonymousSurvey.sln
   scripts/mutation.ps1
   _local/                             # poza gitem — specs i notatki lokalne
 ```
-
-## Specyfikacja lokalna
-
-Kopia designu i planu implementacji: `_local\specs\` (nie trafia do repozytorium).
